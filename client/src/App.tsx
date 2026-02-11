@@ -13,7 +13,12 @@ function Router() {
   return (
     <Switch>
       <Route path={"/admin/login"} component={AdminLogin} />
-      <Route path={"/admin/:rest*"} component={AdminApp} />
+      {/* Avoid wildcard patterns to keep routing reliable in production builds */}
+      <Route path={"/admin"} component={AdminLogin} />
+      <Route path={"/admin/finance"} component={AdminApp} />
+      <Route path={"/admin/finance/transactions"} component={AdminApp} />
+      <Route path={"/admin/finance/categories"} component={AdminApp} />
+      <Route path={"/admin/finance/accounts"} component={AdminApp} />
       <Route path={"/"} component={Home} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
