@@ -2,12 +2,12 @@ export const COOKIE_NAME = "app_session_id";
 export const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
 
 // Configuração de WhatsApp
-export const WHATSAPP_NUMBER = "5571987922212"; // Número da mãe (Lia)
+export const WHATSAPP_NUMBER = "557197198691"; // +55 71 9719-8691
 export const WHATSAPP_API_URL = `https://wa.me/${WHATSAPP_NUMBER}`;
 
 // Pagamento (opcional)
 // - Se você usar PIX adiantado, coloque aqui a sua chave para aparecer no pedido.
-export const PIX_KEY = "";
+export const PIX_KEY = "maria.q.s.j@gmail.com";
 
 // Produtos disponíveis
 export const PRODUCTS = [
