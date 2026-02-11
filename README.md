@@ -27,9 +27,7 @@ Comandos:
 - Build: `pnpm build`
 - Preview do build (servidor do Vite): `pnpm preview`
 - Rodar build com Express (modo “produção” local): `pnpm build` e depois `pnpm start`
-- Testar Function local (Netlify):
-  - `pnpm add -D netlify-cli`
-  - `pnpm netlify dev`
+- Testar Function local (Netlify, porta 8888): `pnpm netlify dev`
 
 ## Estrutura do projeto
 
