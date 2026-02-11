@@ -186,14 +186,15 @@ Arquivos:
 
 ### Persistência “Drive-first” (JSON)
 
-Financeiro é persistido no Google Drive (service account) como JSON em arquivos:
-- `finance_categories.json`
-- `finance_transactions.json`
-- `finance_accounts.json`
+Financeiro é persistido no Google Drive (service account) como **JSON por registro** em subpastas dentro de `GOOGLE_DRIVE_ADMIN_FOLDER_ID`:
+
+- `finance_categories/<id>.json`
+- `finance_transactions/<id>.json`
+- `finance_accounts/<id>.json`
 
 Arquivos:
 - Drive client: `src/driveClient.ts:1`
-- Store genérico JSON: `src/driveJsonStore.ts:1`
+- Store genérico por registro: `src/driveEntityStore.ts:1`
 
 ### Domínio Financeiro (tRPC)
 
@@ -260,6 +261,12 @@ curl -i -b cookies.txt \
 ```bash
 curl -i -b cookies.txt "<SITE>/api/finance/transactions/export.csv"
 ```
+
+7) Verificar no Drive (manual):
+
+- Abra a pasta do Drive informada em `GOOGLE_DRIVE_ADMIN_FOLDER_ID`
+- Entre em `finance_transactions/`
+- Deve existir um arquivo `<id>.json` referente ao lançamento criado
 
 Observação: a formatação exata do payload tRPC segue o padrão do tRPC v11 (body JSON com `json`).
 

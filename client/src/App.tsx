@@ -5,11 +5,15 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import AdminLogin from "./admin/pages/AdminLogin";
+import AdminApp from "./admin/AdminApp";
 
 
 function Router() {
   return (
     <Switch>
+      <Route path={"/admin/login"} component={AdminLogin} />
+      <Route path={"/admin/:rest*"} component={AdminApp} />
       <Route path={"/"} component={Home} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

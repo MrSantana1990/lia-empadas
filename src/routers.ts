@@ -4,7 +4,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { clearAdminCookie, setAdminCookie } from "./context";
 import { getDriveClient } from "./driveClient";
-import { DriveJsonStore } from "./driveJsonStore";
+import { DriveEntityStore, ensureFolder } from "./driveEntityStore";
 import {
   AccountItemSchema,
   CategorySchema,
@@ -28,14 +28,33 @@ function getFinanceFolderId() {
   return requiredEnv("GOOGLE_DRIVE_ADMIN_FOLDER_ID");
 }
 
-function financeStores() {
-  const drive = getDriveClient();
-  const folderId = getFinanceFolderId();
-  return {
-    categories: new DriveJsonStore(drive, folderId, "finance_categories.json", [] as any[]),
-    transactions: new DriveJsonStore(drive, folderId, "finance_transactions.json", [] as any[]),
-    accounts: new DriveJsonStore(drive, folderId, "finance_accounts.json", [] as any[]),
-  };
+type FinanceStores = {
+  categories: DriveEntityStore<z.infer<typeof CategorySchema>>;
+  transactions: DriveEntityStore<z.infer<typeof TransactionSchema>>;
+  accounts: DriveEntityStore<z.infer<typeof AccountItemSchema>>;
+};
+
+let financeStoresPromise: Promise<FinanceStores> | null = null;
+
+async function getFinanceStores(): Promise<FinanceStores> {
+  if (financeStoresPromise) return financeStoresPromise;
+
+  financeStoresPromise = (async () => {
+    const drive = getDriveClient();
+    const root = getFinanceFolderId();
+
+    const categoriesFolder = await ensureFolder(drive, root, "finance_categories");
+    const transactionsFolder = await ensureFolder(drive, root, "finance_transactions");
+    const accountsFolder = await ensureFolder(drive, root, "finance_accounts");
+
+    return {
+      categories: new DriveEntityStore(drive, categoriesFolder, CategorySchema),
+      transactions: new DriveEntityStore(drive, transactionsFolder, TransactionSchema),
+      accounts: new DriveEntityStore(drive, accountsFolder, AccountItemSchema),
+    };
+  })();
+
+  return financeStoresPromise;
 }
 
 const authRouter = router({
@@ -70,42 +89,56 @@ const authRouter = router({
 const financeRouter = router({
   categories: router({
     list: adminProcedure.query(async () => {
-      const { categories } = financeStores();
-      const raw = await categories.read();
-      return z.array(CategorySchema).parse(raw);
+      const { categories } = await getFinanceStores();
+      const items = await categories.list();
+      return { items };
     }),
     create: adminProcedure
       .input(z.object({ name: z.string().min(1), kind: CategorySchema.shape.kind }))
       .mutation(async ({ input }) => {
-        const { categories } = financeStores();
-        const list = z.array(CategorySchema).parse(await categories.read());
         const item = CategorySchema.parse({
           id: nanoid(),
           name: input.name,
           kind: input.kind,
         });
-        await categories.write([...list, item]);
-        return item;
+        const { categories } = await getFinanceStores();
+        await categories.put(item.id, item);
+        return { item };
       }),
     update: adminProcedure
-      .input(z.object({ id: zId, name: z.string().min(1).optional(), kind: CategorySchema.shape.kind.optional() }))
+      .input(
+        z.object({
+          id: zId,
+          data: z.object({
+            name: z.string().min(1).optional(),
+            kind: CategorySchema.shape.kind.optional(),
+          }),
+        })
+      )
       .mutation(async ({ input }) => {
-        const { categories } = financeStores();
-        const list = z.array(CategorySchema).parse(await categories.read());
-        const idx = list.findIndex(c => c.id === input.id);
-        if (idx < 0) throw new TRPCError({ code: "NOT_FOUND" });
-        const updated = CategorySchema.parse({ ...list[idx], ...input });
-        const next = [...list];
-        next[idx] = updated;
-        await categories.write(next);
-        return updated;
+        const { categories } = await getFinanceStores();
+        const existing = await categories.get(input.id);
+        if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
+        const updated = CategorySchema.parse({ ...existing, ...input.data, id: input.id });
+        await categories.put(input.id, updated);
+        return { item: updated };
       }),
-    delete: adminProcedure.input(z.object({ id: zId })).mutation(async ({ input }) => {
-      const { categories } = financeStores();
-      const list = z.array(CategorySchema).parse(await categories.read());
-      await categories.write(list.filter(c => c.id !== input.id));
-      return { ok: true };
-    }),
+    delete: adminProcedure
+      .input(z.object({ id: zId }))
+      .mutation(async ({ input }) => {
+        const { categories, transactions } = await getFinanceStores();
+        const tx = await transactions.list();
+        const inUse = tx.some(t => t.categoryId === input.id);
+        if (inUse) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Não é possível excluir: existem lançamentos usando esta categoria. Reclassifique os lançamentos e tente novamente.",
+          });
+        }
+        await categories.delete(input.id);
+        return { ok: true };
+      }),
   }),
 
   transactions: router({
@@ -116,22 +149,30 @@ const financeRouter = router({
             from: z.string().optional(),
             to: z.string().optional(),
             status: TransactionSchema.shape.status.optional(),
+            type: TransactionSchema.shape.type.optional(),
+            categoryId: zId.optional(),
           })
           .optional()
       )
       .query(async ({ input }) => {
-        const { transactions } = financeStores();
-        const list = z.array(TransactionSchema).parse(await transactions.read());
+        const { transactions } = await getFinanceStores();
+        const list = await transactions.list();
         const from = input?.from;
         const to = input?.to;
         const status = input?.status;
+        const type = input?.type;
+        const categoryId = input?.categoryId;
 
-        return list.filter(t => {
+        const items = list.filter(t => {
           if (status && t.status !== status) return false;
+          if (type && t.type !== type) return false;
+          if (categoryId && t.categoryId !== categoryId) return false;
           if (from && t.dateISO < from) return false;
           if (to && t.dateISO > to) return false;
           return true;
         });
+        items.sort((a, b) => (a.dateISO < b.dateISO ? 1 : -1));
+        return { items };
       }),
 
     create: adminProcedure
@@ -141,53 +182,66 @@ const financeRouter = router({
         })
       )
       .mutation(async ({ input }) => {
-        const { transactions } = financeStores();
-        const list = z.array(TransactionSchema).parse(await transactions.read());
         const item = TransactionSchema.parse({
           ...input,
           id: nanoid(),
           status: input.status ?? "PENDING",
         });
-        await transactions.write([...list, item]);
-        return item;
+        const { transactions } = await getFinanceStores();
+        await transactions.put(item.id, item);
+        return { item };
       }),
 
     update: adminProcedure
       .input(
         z.object({
           id: zId,
-          patch: TransactionSchema.partial().omit({ id: true }),
+          data: TransactionSchema.partial().omit({ id: true }),
         })
       )
       .mutation(async ({ input }) => {
-        const { transactions } = financeStores();
-        const list = z.array(TransactionSchema).parse(await transactions.read());
-        const idx = list.findIndex(t => t.id === input.id);
-        if (idx < 0) throw new TRPCError({ code: "NOT_FOUND" });
-        const updated = TransactionSchema.parse({ ...list[idx], ...input.patch, id: input.id });
-        const next = [...list];
-        next[idx] = updated;
-        await transactions.write(next);
-        return updated;
+        const { transactions } = await getFinanceStores();
+        const existing = await transactions.get(input.id);
+        if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
+        const updated = TransactionSchema.parse({ ...existing, ...input.data, id: input.id });
+        await transactions.put(input.id, updated);
+        return { item: updated };
       }),
 
     delete: adminProcedure.input(z.object({ id: zId })).mutation(async ({ input }) => {
-      const { transactions } = financeStores();
-      const list = z.array(TransactionSchema).parse(await transactions.read());
-      await transactions.write(list.filter(t => t.id !== input.id));
+      const { transactions } = await getFinanceStores();
+      await transactions.delete(input.id);
       return { ok: true };
     }),
 
-    confirm: adminProcedure.input(z.object({ id: zId })).mutation(async ({ input }) => {
-      const { transactions } = financeStores();
-      const list = z.array(TransactionSchema).parse(await transactions.read());
-      const idx = list.findIndex(t => t.id === input.id);
-      if (idx < 0) throw new TRPCError({ code: "NOT_FOUND" });
-      const updated = TransactionSchema.parse({ ...list[idx], status: "CONFIRMED" });
-      const next = [...list];
-      next[idx] = updated;
-      await transactions.write(next);
-      return updated;
+    confirm: adminProcedure
+      .input(
+        z.object({
+          id: zId,
+          receivedAt: z.string().optional(),
+          paymentMethod: PaymentMethodSchema.optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { transactions } = await getFinanceStores();
+        const existing = await transactions.get(input.id);
+        if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
+        const updated = TransactionSchema.parse({
+          ...existing,
+          status: "CONFIRMED",
+          paymentMethod: input.paymentMethod ?? existing.paymentMethod,
+        });
+        await transactions.put(input.id, updated);
+        return { item: updated };
+      }),
+
+    cancel: adminProcedure.input(z.object({ id: zId })).mutation(async ({ input }) => {
+      const { transactions } = await getFinanceStores();
+      const existing = await transactions.get(input.id);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
+      const updated = TransactionSchema.parse({ ...existing, status: "CANCELED" });
+      await transactions.put(input.id, updated);
+      return { item: updated };
     }),
 
     export: router({
@@ -198,9 +252,9 @@ const financeRouter = router({
             .optional()
         )
         .query(async ({ input }) => {
-          const { transactions, categories } = financeStores();
-          const tx = z.array(TransactionSchema).parse(await transactions.read());
-          const cats = z.array(CategorySchema).parse(await categories.read());
+          const { transactions, categories } = await getFinanceStores();
+          const tx = await transactions.list();
+          const cats = await categories.list();
           const catMap = new Map(cats.map(c => [c.id, c.name]));
 
           const from = input?.from;
@@ -251,9 +305,10 @@ const financeRouter = router({
 
   accounts: router({
     list: adminProcedure.query(async () => {
-      const { accounts } = financeStores();
-      const list = await accounts.read();
-      return z.array(AccountItemSchema).parse(list);
+      const { accounts } = await getFinanceStores();
+      const items = await accounts.list();
+      items.sort((a, b) => (a.dueDateISO < b.dueDateISO ? -1 : 1));
+      return { items };
     }),
     create: adminProcedure
       .input(
@@ -262,47 +317,39 @@ const financeRouter = router({
         })
       )
       .mutation(async ({ input }) => {
-        const { accounts } = financeStores();
-        const list = z.array(AccountItemSchema).parse(await accounts.read());
         const item = AccountItemSchema.parse({
           ...input,
           id: nanoid(),
           status: input.status ?? "OPEN",
         });
-        await accounts.write([...list, item]);
-        return item;
+        const { accounts } = await getFinanceStores();
+        await accounts.put(item.id, item);
+        return { item };
       }),
     update: adminProcedure
-      .input(z.object({ id: zId, patch: AccountItemSchema.partial().omit({ id: true }) }))
+      .input(z.object({ id: zId, data: AccountItemSchema.partial().omit({ id: true }) }))
       .mutation(async ({ input }) => {
-        const { accounts } = financeStores();
-        const list = z.array(AccountItemSchema).parse(await accounts.read());
-        const idx = list.findIndex(a => a.id === input.id);
-        if (idx < 0) throw new TRPCError({ code: "NOT_FOUND" });
-        const updated = AccountItemSchema.parse({ ...list[idx], ...input.patch, id: input.id });
-        const next = [...list];
-        next[idx] = updated;
-        await accounts.write(next);
-        return updated;
+        const { accounts } = await getFinanceStores();
+        const existing = await accounts.get(input.id);
+        if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
+        const updated = AccountItemSchema.parse({ ...existing, ...input.data, id: input.id });
+        await accounts.put(input.id, updated);
+        return { item: updated };
       }),
     delete: adminProcedure.input(z.object({ id: zId })).mutation(async ({ input }) => {
-      const { accounts } = financeStores();
-      const list = z.array(AccountItemSchema).parse(await accounts.read());
-      await accounts.write(list.filter(a => a.id !== input.id));
+      const { accounts } = await getFinanceStores();
+      await accounts.delete(input.id);
       return { ok: true };
     }),
     pay: adminProcedure
       .input(z.object({ id: zId, paymentMethod: PaymentMethodSchema.optional() }))
       .mutation(async ({ input }) => {
-        const { accounts } = financeStores();
-        const list = z.array(AccountItemSchema).parse(await accounts.read());
-        const idx = list.findIndex(a => a.id === input.id);
-        if (idx < 0) throw new TRPCError({ code: "NOT_FOUND" });
-        const updated = AccountItemSchema.parse({ ...list[idx], status: "PAID" });
-        const next = [...list];
-        next[idx] = updated;
-        await accounts.write(next);
-        return updated;
+        const { accounts } = await getFinanceStores();
+        const existing = await accounts.get(input.id);
+        if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
+        const updated = AccountItemSchema.parse({ ...existing, status: "PAID" });
+        await accounts.put(input.id, updated);
+        return { item: updated };
       }),
   }),
 
@@ -310,33 +357,66 @@ const financeRouter = router({
     summary: adminProcedure
       .input(z.object({ from: z.string(), to: z.string() }))
       .query(async ({ input }) => {
-        const { transactions } = financeStores();
-        const list = z.array(TransactionSchema).parse(await transactions.read());
-        const filtered = list.filter(t => {
-          if (t.status !== "CONFIRMED") return false;
-          if (t.dateISO < input.from) return false;
-          if (t.dateISO > input.to) return false;
-          return true;
-        });
+        const { transactions, categories } = await getFinanceStores();
+        const tx = await transactions.list();
+        const cats = await categories.list();
+        const catMap = new Map(cats.map(c => [c.id, c.name]));
 
-        const totalIn = filtered
+        const inRange = tx.filter(t => t.dateISO >= input.from && t.dateISO <= input.to);
+
+        const confirmed = inRange.filter(t => t.status === "CONFIRMED");
+        const pending = inRange.filter(t => t.status === "PENDING");
+
+        const inConfirmed = confirmed
           .filter(t => t.type === "IN")
           .reduce((s, t) => s + t.amount, 0);
-        const totalOut = filtered
+        const outConfirmed = confirmed
           .filter(t => t.type === "OUT")
           .reduce((s, t) => s + t.amount, 0);
-        const totalAdjust = filtered
+        const adjustConfirmed = confirmed
           .filter(t => t.type === "ADJUST")
           .reduce((s, t) => s + t.amount, 0);
 
+        const pendingAmount = pending.reduce((s, t) => s + t.amount, 0);
+
+        const byCategoryMap = new Map<string, number>();
+        for (const t of confirmed) {
+          const sign = t.type === "OUT" ? -1 : 1;
+          byCategoryMap.set(t.categoryId, (byCategoryMap.get(t.categoryId) ?? 0) + sign * t.amount);
+        }
+        const byCategory = [...byCategoryMap.entries()]
+          .map(([categoryId, total]) => ({
+            categoryId,
+            categoryName: catMap.get(categoryId) ?? "Sem categoria",
+            total,
+          }))
+          .sort((a, b) => Math.abs(b.total) - Math.abs(a.total))
+          .slice(0, 5);
+
+        const byPaymentMap = new Map<string, number>();
+        for (const t of confirmed) {
+          const sign = t.type === "OUT" ? -1 : 1;
+          byPaymentMap.set(
+            t.paymentMethod,
+            (byPaymentMap.get(t.paymentMethod) ?? 0) + sign * t.amount
+          );
+        }
+        const byPayment = [...byPaymentMap.entries()].map(([method, total]) => ({
+          method,
+          total,
+        }));
+
         return {
-          from: input.from,
-          to: input.to,
-          count: filtered.length,
-          totalIn,
-          totalOut,
-          totalAdjust,
-          net: totalIn - totalOut + totalAdjust,
+          range: { from: input.from, to: input.to },
+          totals: {
+            inConfirmed,
+            outConfirmed,
+            balance: inConfirmed - outConfirmed + adjustConfirmed,
+            pendingCount: pending.length,
+            pendingAmount,
+          },
+          byCategory,
+          byPayment,
         };
       }),
   }),
