@@ -4,6 +4,14 @@ export type TrpcError = {
   code?: string;
 };
 
+function tryParseJson(text: string) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 function parseTrpcResponse(body: any) {
   if (body?.result?.data?.json !== undefined) return body.result.data.json;
   if (body?.result?.data !== undefined) return body.result.data;
@@ -21,12 +29,8 @@ export async function trpcCall<TOutput>(
     body: JSON.stringify({ json: input }),
   });
 
-  let body: any = null;
-  try {
-    body = await res.json();
-  } catch {
-    // ignore
-  }
+  const rawText = await res.text();
+  const body: any = rawText ? tryParseJson(rawText) : null;
 
   if (!res.ok) {
     const message =
@@ -45,4 +49,3 @@ export async function trpcCall<TOutput>(
 
   return parseTrpcResponse(body) as TOutput;
 }
-

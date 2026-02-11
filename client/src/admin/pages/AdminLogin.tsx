@@ -5,6 +5,28 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { trpcCall, type TrpcError } from "../lib/trpcClient";
 
+function getLoginErrorMessage(err: unknown) {
+  const e = err as Partial<TrpcError> | undefined;
+  const status = typeof e?.status === "number" ? e.status : undefined;
+  const message = typeof e?.message === "string" ? e.message : undefined;
+
+  if (status === 401) return "Usuário ou senha inválidos.";
+
+  if (status === 404) {
+    return "Backend não encontrado. Para o Admin funcionar local, rode `pnpm dlx netlify-cli dev` e acesse http://localhost:8888/admin/login.";
+  }
+
+  if (status === 500) {
+    return "Erro no backend. Verifique se suas env vars estão carregadas (JWT_SECRET, ADMIN_USERNAME, ADMIN_PASSWORD, GOOGLE_*).";
+  }
+
+  if (message && /failed to fetch|networkerror|load failed/i.test(message)) {
+    return "Falha de rede ao chamar o backend. Rode `pnpm dlx netlify-cli dev` (porta 8888) e tente novamente.";
+  }
+
+  return message || "Falha no login";
+}
+
 export default function AdminLogin() {
   const [, setLocation] = useLocation();
   const [username, setUsername] = useState("");
@@ -12,16 +34,22 @@ export default function AdminLogin() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (ev: React.FormEvent) => {
+    ev.preventDefault();
     setError("");
+
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername || !password) {
+      setError("Preencha usuário e senha.");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      await trpcCall("auth.login", { username, password });
+      await trpcCall("auth.login", { username: trimmedUsername, password });
       setLocation("/admin/finance");
     } catch (err) {
-      const e = err as TrpcError;
-      setError(e.message || "Falha no login");
+      setError(getLoginErrorMessage(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -49,7 +77,7 @@ export default function AdminLogin() {
               </label>
               <input
                 value={username}
-                onChange={e => setUsername(e.target.value)}
+                onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-3 py-2 border border-gold/20 rounded-lg focus:outline-none focus:border-gold"
                 autoComplete="username"
               />
@@ -62,7 +90,7 @@ export default function AdminLogin() {
               <input
                 type="password"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-3 py-2 border border-gold/20 rounded-lg focus:outline-none focus:border-gold"
                 autoComplete="current-password"
               />
@@ -79,7 +107,7 @@ export default function AdminLogin() {
               disabled={isSubmitting}
               className="btn-premium w-full"
             >
-              {isSubmitting ? "Entrando…" : "Entrar"}
+              {isSubmitting ? "Entrando..." : "Entrar"}
             </Button>
           </form>
         </CardContent>

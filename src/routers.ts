@@ -59,7 +59,7 @@ async function getFinanceStores(): Promise<FinanceStores> {
 
 const authRouter = router({
   login: publicProcedure
-    .input(z.object({ username: z.string(), password: z.string() }))
+    .input(z.object({ username: z.string().min(1), password: z.string().min(1) }))
     .mutation(({ input, ctx }) => {
       const username = requiredEnv("ADMIN_USERNAME");
       const password = requiredEnv("ADMIN_PASSWORD");

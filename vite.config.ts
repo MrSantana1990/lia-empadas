@@ -171,6 +171,16 @@ export default defineConfig({
     port: 3000,
     strictPort: false, // Will find next available port if 3000 is busy
     host: true,
+    proxy: {
+      // When running `netlify dev`, the Functions/API live on :8888.
+      // This proxy lets you keep using Vite directly on :3000 during dev
+      // while still reaching the backend at `/api/*`.
+      "/api": {
+        target: "http://localhost:8888",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
     allowedHosts: [
       ".manuspre.computer",
       ".manus.computer",
