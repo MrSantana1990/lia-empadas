@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../AdminLayout";
-import { trpcCall, type TrpcError } from "../lib/trpcClient";
+import { trpcMutation, trpcQuery, type TrpcError } from "../lib/trpcClient";
 import { CategorySchema, type Category } from "../schemas";
 
 export default function CategoriesPage() {
@@ -26,7 +26,7 @@ export default function CategoriesPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await trpcCall<{ items: Category[] }>("finance.categories.list");
+      const res = await trpcQuery<{ items: Category[] }>("finance.categories.list");
       setItems(res.items.map(i => CategorySchema.parse(i)));
     } catch (e) {
       setError((e as TrpcError).message || "Erro");
@@ -55,12 +55,12 @@ export default function CategoriesPage() {
     setError("");
     try {
       if (editing) {
-        await trpcCall("finance.categories.update", {
+        await trpcMutation("finance.categories.update", {
           id: editing.id,
           data: { name, kind },
         });
       } else {
-        await trpcCall("finance.categories.create", { name, kind });
+        await trpcMutation("finance.categories.create", { name, kind });
       }
       await load();
       startCreate();
@@ -73,7 +73,7 @@ export default function CategoriesPage() {
     if (!confirm("Excluir categoria?")) return;
     setError("");
     try {
-      await trpcCall("finance.categories.delete", { id });
+      await trpcMutation("finance.categories.delete", { id });
       await load();
     } catch (e) {
       setError((e as TrpcError).message || "Erro ao excluir");
@@ -85,7 +85,7 @@ export default function CategoriesPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
         <div className="space-y-3">
           {loading ? (
-            <div className="text-sm text-gray-medium">Carregando…</div>
+            <div className="text-sm text-gray-medium">Carregando...</div>
           ) : (
             <Table>
               <TableHeader>
@@ -173,4 +173,3 @@ export default function CategoriesPage() {
     </AdminLayout>
   );
 }
-

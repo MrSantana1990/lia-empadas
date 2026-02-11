@@ -226,7 +226,7 @@ curl -i "<SITE>/api/trpc/auth.me"
 ```bash
 curl -i -c cookies.txt \
   -H "content-type: application/json" \
-  -d '{"json":{"username":"'"$ADMIN_USERNAME"'","password":"'"$ADMIN_PASSWORD"'"}}' \
+  -d '{"username":"'"$ADMIN_USERNAME"'","password":"'"$ADMIN_PASSWORD"'"}' \
   "<SITE>/api/trpc/auth.login"
 ```
 
@@ -241,7 +241,7 @@ curl -i -b cookies.txt "<SITE>/api/trpc/auth.me"
 ```bash
 curl -i -b cookies.txt \
   -H "content-type: application/json" \
-  -d '{"json":{"name":"Vendas","kind":"IN"}}' \
+  -d '{"name":"Vendas","kind":"IN"}' \
   "<SITE>/api/trpc/finance.categories.create"
 ```
 
@@ -252,7 +252,7 @@ Troque `CATEGORY_ID` pelo `id` retornado na categoria.
 ```bash
 curl -i -b cookies.txt \
   -H "content-type: application/json" \
-  -d '{"json":{"type":"IN","dateISO":"2026-02-11","amount":10,"categoryId":"CATEGORY_ID","paymentMethod":"PIX","description":"Venda balcão","source":"manual"}}' \
+  -d '{"type":"IN","dateISO":"2026-02-11","amount":10,"categoryId":"CATEGORY_ID","paymentMethod":"PIX","description":"Venda balcão","source":"manual"}' \
   "<SITE>/api/trpc/finance.transactions.create"
 ```
 
@@ -268,7 +268,7 @@ curl -i -b cookies.txt "<SITE>/api/finance/transactions/export.csv"
 - Entre em `finance_transactions/`
 - Deve existir um arquivo `<id>.json` referente ao lançamento criado
 
-Observação: a formatação exata do payload tRPC segue o padrão do tRPC v11 (body JSON com `json`).
+Observação: para mutations tRPC use `POST /api/trpc/<procedure>` com body JSON sendo o input direto (ex: `{"username":"...","password":"..."}`); para queries use `GET /api/trpc/<procedure>?input=<json-url-encoded>`.
 
 ## Debug logs (.manus-logs)
 

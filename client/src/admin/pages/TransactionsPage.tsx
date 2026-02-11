@@ -11,7 +11,7 @@ import { formatPrice } from "@/lib/whatsappUtils";
 import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../AdminLayout";
 import { startOfMonthISO, toDateInputValue } from "../lib/date";
-import { trpcCall, type TrpcError } from "../lib/trpcClient";
+import { trpcMutation, trpcQuery, type TrpcError } from "../lib/trpcClient";
 import {
   CategorySchema,
   TransactionSchema,
@@ -66,8 +66,8 @@ export default function TransactionsPage() {
     setError("");
     try {
       const [catsRes, txRes] = await Promise.all([
-        trpcCall<{ items: Category[] }>("finance.categories.list"),
-        trpcCall<{ items: Transaction[] }>("finance.transactions.list", {
+        trpcQuery<{ items: Category[] }>("finance.categories.list"),
+        trpcQuery<{ items: Transaction[] }>("finance.transactions.list", {
           from: filters.from || undefined,
           to: filters.to || undefined,
           status: filters.status || undefined,
@@ -139,12 +139,12 @@ export default function TransactionsPage() {
       }
 
       if (editing) {
-        await trpcCall("finance.transactions.update", {
+        await trpcMutation("finance.transactions.update", {
           id: editing.id,
           data: { ...form },
         });
       } else {
-        await trpcCall("finance.transactions.create", {
+        await trpcMutation("finance.transactions.create", {
           ...form,
           source: "manual",
           reference: undefined,
@@ -161,7 +161,7 @@ export default function TransactionsPage() {
     if (!confirm("Excluir lançamento?")) return;
     setError("");
     try {
-      await trpcCall("finance.transactions.delete", { id });
+      await trpcMutation("finance.transactions.delete", { id });
       await loadAll();
     } catch (e) {
       setError((e as TrpcError).message || "Erro ao excluir");
@@ -171,7 +171,7 @@ export default function TransactionsPage() {
   const confirmTx = async (id: string) => {
     setError("");
     try {
-      await trpcCall("finance.transactions.confirm", { id });
+      await trpcMutation("finance.transactions.confirm", { id });
       await loadAll();
     } catch (e) {
       setError((e as TrpcError).message || "Erro ao confirmar");
@@ -181,7 +181,7 @@ export default function TransactionsPage() {
   const cancelTx = async (id: string) => {
     setError("");
     try {
-      await trpcCall("finance.transactions.cancel", { id });
+      await trpcMutation("finance.transactions.cancel", { id });
       await loadAll();
     } catch (e) {
       setError((e as TrpcError).message || "Erro ao cancelar");
@@ -519,4 +519,3 @@ export default function TransactionsPage() {
     </AdminLayout>
   );
 }
-

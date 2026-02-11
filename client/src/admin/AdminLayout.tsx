@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BarChart3, CreditCard, LogOut, Receipt, Tags } from "lucide-react";
 import { useLocation } from "wouter";
-import { trpcCall } from "./lib/trpcClient";
+import { trpcMutation } from "./lib/trpcClient";
 
 type NavItem = {
   href: string;
@@ -45,7 +45,7 @@ export default function AdminLayout({
   const [location, setLocation] = useLocation();
 
   const handleLogout = async () => {
-    await trpcCall("auth.logout");
+    await trpcMutation("auth.logout");
     setLocation("/admin/login");
   };
 
@@ -104,4 +104,3 @@ export default function AdminLayout({
     </div>
   );
 }
-

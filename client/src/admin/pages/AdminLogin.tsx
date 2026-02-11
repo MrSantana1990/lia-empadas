@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { trpcCall, type TrpcError } from "../lib/trpcClient";
+import { trpcMutation, type TrpcError } from "../lib/trpcClient";
 
 function getLoginErrorMessage(err: unknown) {
   const e = err as Partial<TrpcError> | undefined;
@@ -46,7 +46,7 @@ export default function AdminLogin() {
 
     setIsSubmitting(true);
     try {
-      await trpcCall("auth.login", { username: trimmedUsername, password });
+      await trpcMutation("auth.login", { username: trimmedUsername, password });
       setLocation("/admin/finance");
     } catch (err) {
       setError(getLoginErrorMessage(err));
@@ -115,4 +115,3 @@ export default function AdminLogin() {
     </div>
   );
 }
-

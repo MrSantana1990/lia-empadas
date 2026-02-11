@@ -11,7 +11,7 @@ import { formatPrice } from "@/lib/whatsappUtils";
 import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../AdminLayout";
 import { toDateInputValue } from "../lib/date";
-import { trpcCall, type TrpcError } from "../lib/trpcClient";
+import { trpcMutation, trpcQuery, type TrpcError } from "../lib/trpcClient";
 import { AccountItemSchema, type AccountItem } from "../schemas";
 
 export default function AccountsPage() {
@@ -31,7 +31,7 @@ export default function AccountsPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await trpcCall<{ items: AccountItem[] }>("finance.accounts.list");
+      const res = await trpcQuery<{ items: AccountItem[] }>("finance.accounts.list");
       setItems(res.items.map(i => AccountItemSchema.parse(i)));
     } catch (e) {
       setError((e as TrpcError).message || "Erro");
@@ -66,12 +66,12 @@ export default function AccountsPage() {
     setError("");
     try {
       if (editing) {
-        await trpcCall("finance.accounts.update", {
+        await trpcMutation("finance.accounts.update", {
           id: editing.id,
           data: { kind, dueDateISO, amount, status, notes },
         });
       } else {
-        await trpcCall("finance.accounts.create", {
+        await trpcMutation("finance.accounts.create", {
           kind,
           dueDateISO,
           amount,
@@ -90,7 +90,7 @@ export default function AccountsPage() {
     if (!confirm("Excluir conta?")) return;
     setError("");
     try {
-      await trpcCall("finance.accounts.delete", { id });
+      await trpcMutation("finance.accounts.delete", { id });
       await load();
     } catch (e) {
       setError((e as TrpcError).message || "Erro ao excluir");
@@ -100,7 +100,7 @@ export default function AccountsPage() {
   const pay = async (id: string) => {
     setError("");
     try {
-      await trpcCall("finance.accounts.pay", { id });
+      await trpcMutation("finance.accounts.pay", { id });
       await load();
     } catch (e) {
       setError((e as TrpcError).message || "Erro ao pagar");
@@ -112,7 +112,7 @@ export default function AccountsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
         <div className="space-y-3">
           {loading ? (
-            <div className="text-sm text-gray-medium">Carregando…</div>
+            <div className="text-sm text-gray-medium">Carregando...</div>
           ) : (
             <Table>
               <TableHeader>
@@ -258,4 +258,3 @@ export default function AccountsPage() {
     </AdminLayout>
   );
 }
-

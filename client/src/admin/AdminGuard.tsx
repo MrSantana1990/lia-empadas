@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { trpcCall, type TrpcError } from "./lib/trpcClient";
+import { trpcQuery, type TrpcError } from "./lib/trpcClient";
 
 export default function AdminGuard({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
@@ -11,7 +11,7 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     let mounted = true;
-    trpcCall<{ role: "admin" }>("auth.me")
+    trpcQuery<{ role: "admin" }>("auth.me")
       .then(() => {
         if (!mounted) return;
         setStatus("authed");
@@ -34,7 +34,7 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
   if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-sm text-muted-foreground">Carregando…</div>
+        <div className="text-sm text-muted-foreground">Carregando...</div>
       </div>
     );
   }
@@ -53,4 +53,3 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
   if (status === "anon") return null;
   return <>{children}</>;
 }
-

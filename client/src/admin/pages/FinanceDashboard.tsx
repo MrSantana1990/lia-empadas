@@ -3,7 +3,7 @@ import { formatPrice } from "@/lib/whatsappUtils";
 import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../AdminLayout";
 import { startOfMonthISO, toDateInputValue } from "../lib/date";
-import { trpcCall } from "../lib/trpcClient";
+import { trpcQuery } from "../lib/trpcClient";
 
 type DashboardSummary = {
   range: { from: string; to: string };
@@ -31,7 +31,7 @@ export default function FinanceDashboard() {
     let mounted = true;
     setLoading(true);
     setError("");
-    trpcCall<DashboardSummary>("finance.dashboard.summary", { from, to })
+    trpcQuery<DashboardSummary>("finance.dashboard.summary", { from, to })
       .then(res => {
         if (!mounted) return;
         setData(res);
@@ -83,7 +83,7 @@ export default function FinanceDashboard() {
       </div>
 
       {loading ? (
-        <div className="text-sm text-gray-medium">Carregando…</div>
+        <div className="text-sm text-gray-medium">Carregando...</div>
       ) : error ? (
         <div className="text-sm text-red-600">{error}</div>
       ) : !data ? null : (
@@ -181,4 +181,3 @@ export default function FinanceDashboard() {
     </AdminLayout>
   );
 }
-
