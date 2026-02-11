@@ -1,0 +1,21 @@
+[build]
+  command = "pnpm build"
+  publish = "dist/public"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[build.environment]
+  NODE_VERSION = "20"
+  PNPM_VERSION = "10.4.1"

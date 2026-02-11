@@ -1,0 +1,231 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-gold: var(--color-gold);
+  --color-gold-light: var(--color-gold-light);
+  --color-gold-dark: var(--color-gold-dark);
+  --color-charcoal: var(--color-charcoal);
+  --color-gray-light: var(--color-gray-light);
+  --color-gray-medium: var(--color-gray-medium);
+  --color-olive: var(--color-olive);
+  --color-olive-light: var(--color-olive-light);
+  --color-cream: var(--color-cream);
+}
+
+:root {
+  /* Luxo Minimalista Moderno - Paleta Principal */
+  --color-gold: #D4AF37;
+  --color-gold-light: #E8D4A0;
+  --color-gold-dark: #9B8B2A;
+  /* "Cara de iFood" + nosso toque */
+  --color-brand: #EA1D2C;
+  --color-brand-dark: #B91520;
+  --color-primary-dark: var(--color-brand-dark);
+  --color-white: #FFFFFF;
+  --color-cream: #F9F7F3;
+  --color-charcoal: #2C2C2C;
+  --color-gray-light: #E8E8E8;
+  --color-gray-medium: #999999;
+  --color-olive: #556B2F;
+  --color-olive-light: #7A8E4A;
+  
+  /* Semantic Colors */
+  --primary: var(--color-brand);
+  --primary-foreground: var(--color-white);
+  --sidebar-primary: var(--color-brand);
+  --sidebar-primary-foreground: var(--color-white);
+  --chart-1: var(--color-brand);
+  --chart-2: var(--color-olive);
+  --chart-3: var(--color-gold);
+  --chart-4: var(--color-charcoal);
+  --chart-5: var(--color-gray-medium);
+  --radius: 0.5rem;
+  
+  /* Light Theme */
+  --background: var(--color-white);
+  --foreground: var(--color-charcoal);
+  --card: var(--color-cream);
+  --card-foreground: var(--color-charcoal);
+  --popover: var(--color-white);
+  --popover-foreground: var(--color-charcoal);
+  --secondary: var(--color-gray-light);
+  --secondary-foreground: var(--color-charcoal);
+  --muted: var(--color-gray-light);
+  --muted-foreground: var(--color-gray-medium);
+  --accent: var(--color-olive);
+  --accent-foreground: var(--color-white);
+  --destructive: #DC2626;
+  --destructive-foreground: var(--color-white);
+  --border: var(--color-gray-light);
+  --input: var(--color-gray-light);
+  --ring: var(--color-brand);
+  --sidebar: var(--color-white);
+  --sidebar-foreground: var(--color-charcoal);
+  --sidebar-accent: var(--color-gold);
+  --sidebar-accent-foreground: var(--color-charcoal);
+  --sidebar-border: var(--color-gray-light);
+  --sidebar-ring: var(--color-brand);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Lato', sans-serif;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  
+  h1 {
+    @apply text-5xl md:text-6xl;
+    font-weight: 700;
+  }
+  
+  h2 {
+    @apply text-4xl md:text-5xl;
+    font-weight: 700;
+  }
+  
+  h3 {
+    @apply text-2xl md:text-3xl;
+    font-weight: 700;
+  }
+  
+  h4 {
+    @apply text-xl md:text-2xl;
+    font-weight: 700;
+  }
+  
+  p {
+    font-family: 'Lato', sans-serif;
+    @apply text-base leading-relaxed;
+    font-weight: 300;
+  }
+  
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [type="button"]:not(:disabled),
+  [type="submit"]:not(:disabled),
+  [type="reset"]:not(:disabled),
+  a[href],
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled) {
+    @apply cursor-pointer;
+  }
+}
+
+@layer components {
+  /* Tipografia - Montserrat para CTAs - usar font-semibold com estilo inline */
+  .font-cta {
+    font-family: "Montserrat", sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.25px;
+  }
+
+  .logo-img {
+    filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.12)) contrast(1.06)
+      saturate(1.08);
+  }
+  
+  /* Divisor Dourado - Elemento Signature */
+  .divider-gold {
+    @apply h-1 bg-gradient-to-r from-transparent to-transparent;
+    background: linear-gradient(to right, transparent, var(--color-gold), transparent);
+  }
+  
+  /* Container Customizado */
+  .container {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .flex {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  @media (min-width: 640px) {
+    .container {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .container {
+      padding-left: 2rem;
+      padding-right: 2rem;
+      max-width: 1280px;
+    }
+  }
+  
+  /* Card com moldura dourada */
+  .card-premium {
+    @apply bg-card text-card-foreground rounded-lg border-2 border-gold/20 shadow-sm hover:shadow-lg hover:border-gold/40 transition-all duration-300;
+  }
+  
+  /* Botão Premium */
+  .btn-premium {
+    @apply font-semibold px-6 py-3 text-primary-foreground rounded-lg transition-all duration-300 hover:shadow-lg hover:brightness-105 active:brightness-95;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--color-primary-dark) 100%);
+    font-family: "Montserrat", sans-serif;
+    letter-spacing: 0.5px;
+  }
+  
+  /* Botão Secundário */
+  .btn-secondary {
+    @apply font-semibold px-6 py-3 bg-transparent text-gold border-2 border-gold rounded-lg hover:bg-gold/10 transition-all duration-300;
+    font-family: "Montserrat", sans-serif;
+    letter-spacing: 0.5px;
+  }
+}
