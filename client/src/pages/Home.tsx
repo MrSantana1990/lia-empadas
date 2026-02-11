@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
-import { ShoppingCart, Menu, X, ChevronRight } from 'lucide-react';
+import { ShoppingCart, Menu, X, ChevronRight, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ProductCard from '@/components/ProductCard';
 import { useCart } from '@/hooks/useCart';
 import { PRODUCTS, CATEGORIES } from '@/const';
 import CartDrawer from '@/components/CartDrawer';
 import BrandLogo from '@/components/BrandLogo';
+import { useLocation } from 'wouter';
 
 /**
  * Design: Luxo Minimalista Moderno
@@ -20,6 +21,7 @@ export default function Home() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { addItem, getTotalQuantity, isLoaded } = useCart();
+  const [, setLocation] = useLocation();
 
   // Filtrar produtos por categoria
   const filteredProducts = useMemo(() => {
@@ -77,6 +79,15 @@ export default function Home() {
           {/* Cart Button & Mobile Menu */}
           <div className="flex items-center gap-4">
             <button
+              onClick={() => setLocation('/admin/login')}
+              className="inline-flex items-center gap-2 px-2 sm:px-3 py-2 rounded-lg border border-gold/30 bg-white/60 hover:bg-white transition-colors text-charcoal text-sm font-semibold"
+              aria-label="Acessar área administrativa"
+            >
+              <Shield size={18} className="text-charcoal" />
+              <span className="hidden sm:inline">Admin</span>
+            </button>
+
+            <button
               onClick={() => setIsCartOpen(true)}
               className="relative p-2 hover:bg-primary/10 rounded-lg transition-colors"
               aria-label="Abrir carrinho"
@@ -117,6 +128,17 @@ export default function Home() {
               <a href="#contato" className="text-charcoal hover:text-gold transition-colors font-semibold">
                 Contato
               </a>
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setLocation('/admin/login');
+                }}
+                className="flex items-center gap-2 text-charcoal hover:text-gold transition-colors font-semibold text-left"
+                aria-label="Acessar área administrativa"
+              >
+                <Shield size={18} />
+                <span>Admin</span>
+              </button>
             </nav>
           </div>
         )}
