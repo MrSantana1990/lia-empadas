@@ -55,7 +55,9 @@ async function getFinanceStores(): Promise<FinanceStores> {
   financeStoresPromise = (async () => {
     const drive = getDriveClient();
     const root = getFinanceFolderId();
-    const devFallbackEnabled = process.env.NODE_ENV !== "production";
+    // IMPORTANT: never write to local filesystem in Netlify production (read-only).
+    // Enable local fallback only for local development (`netlify dev`) or non-Netlify runs.
+    const devFallbackEnabled = process.env.NETLIFY_DEV === "true" || !process.env.NETLIFY;
     const localRoot = getLocalDataRootDir();
 
     let usePrefixes = false;
@@ -199,7 +201,8 @@ async function getCatalogOverridesStore() {
   catalogOverridesStorePromise = (async () => {
     const drive = getDriveClient();
     const root = requiredEnv("GOOGLE_DRIVE_ADMIN_FOLDER_ID");
-    const devFallbackEnabled = process.env.NODE_ENV !== "production";
+    // IMPORTANT: never write to local filesystem in Netlify production (read-only).
+    const devFallbackEnabled = process.env.NETLIFY_DEV === "true" || !process.env.NETLIFY;
     const localRoot = getLocalDataRootDir();
 
     try {
