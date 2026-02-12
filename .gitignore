@@ -105,3 +105,12 @@ temp/
 *.db
 *.sqlite
 *.sqlite3
+
+# Local Netlify folder
+.netlify
+
+# Local dev data (used as fallback when Drive write is not available)
+.local-data/
+
+# Misc
+deno.lock

@@ -3,6 +3,14 @@ import type { ZodSchema } from "zod";
 
 const DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
 
+export type DriveEntityStoreOptions = {
+  /**
+   * Optional prefix used to store multiple entity types in the same Drive folder.
+   * Example: "finance_categories__" -> files like "finance_categories__<id>.json".
+   */
+  filePrefix?: string;
+};
+
 async function findChildFolderId(
   drive: drive_v3.Drive,
   parentId: string,
@@ -17,6 +25,8 @@ async function findChildFolderId(
     ].join(" and "),
     fields: "files(id,name)",
     pageSize: 1,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
   return list.data.files?.[0]?.id ?? null;
 }
@@ -36,6 +46,7 @@ export async function ensureFolder(
       mimeType: DRIVE_FOLDER_MIME,
     },
     fields: "id",
+    supportsAllDrives: true,
   });
   const id = created.data.id;
   if (!id) throw new Error(`Failed to create Drive folder: ${name}`);
@@ -55,29 +66,43 @@ async function findFileIdByName(
     ].join(" and "),
     fields: "files(id,name)",
     pageSize: 1,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
   return list.data.files?.[0]?.id ?? null;
 }
 
+function parseJsonMaybe<T>(raw: unknown): T {
+  if (raw && typeof raw === "object") return raw as T;
+  if (Buffer.isBuffer(raw)) return JSON.parse(raw.toString("utf8")) as T;
+  const text = String(raw ?? "");
+  if (!text) throw new Error("Empty JSON");
+  return JSON.parse(text) as T;
+}
+
 async function downloadJson<T>(drive: drive_v3.Drive, fileId: string): Promise<T> {
   const res = await drive.files.get(
-    { fileId, alt: "media" },
-    { responseType: "text" }
+    { fileId, alt: "media", supportsAllDrives: true },
+    { responseType: "text" as any }
   );
-  return JSON.parse(String(res.data ?? "")) as T;
+  return parseJsonMaybe<T>(res.data);
 }
 
 export class DriveEntityStore<T extends { id: string }> {
   private readonly idToFileId = new Map<string, string>();
+  private readonly filePrefix: string;
 
   constructor(
     private readonly drive: drive_v3.Drive,
     private readonly folderId: string,
-    private readonly schema: ZodSchema<T>
-  ) {}
+    private readonly schema: ZodSchema<T>,
+    options?: DriveEntityStoreOptions
+  ) {
+    this.filePrefix = options?.filePrefix ?? "";
+  }
 
   private fileNameForId(id: string) {
-    return `${id}.json`;
+    return `${this.filePrefix}${id}.json`;
   }
 
   async list(): Promise<T[]> {
@@ -90,15 +115,23 @@ export class DriveEntityStore<T extends { id: string }> {
         fields: "nextPageToken,files(id,name)",
         pageSize: 1000,
         pageToken,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
       })) as unknown as { data: drive_v3.Schema$FileList };
       files.push(...(res.data.files ?? []));
       pageToken = res.data.nextPageToken ?? undefined;
     } while (pageToken);
 
-    const jsonFiles = files.filter(f => f.id && f.name?.endsWith(".json"));
+    const jsonFiles = files.filter((f) => {
+      if (!f.id) return false;
+      const name = f.name ?? "";
+      if (!name.endsWith(".json")) return false;
+      if (this.filePrefix && !name.startsWith(this.filePrefix)) return false;
+      return true;
+    });
 
-    const items = await Promise.all(
-      jsonFiles.map(async f => {
+    const settled = await Promise.allSettled(
+      jsonFiles.map(async (f) => {
         const fileId = f.id as string;
         const raw = await downloadJson<unknown>(this.drive, fileId);
         const parsed = this.schema.parse(raw);
@@ -107,7 +140,7 @@ export class DriveEntityStore<T extends { id: string }> {
       })
     );
 
-    return items;
+    return settled.flatMap((s) => (s.status === "fulfilled" ? [s.value] : []));
   }
 
   async get(id: string): Promise<T | null> {
@@ -134,6 +167,7 @@ export class DriveEntityStore<T extends { id: string }> {
       await this.drive.files.update({
         fileId,
         media: { mimeType: "application/json", body: JSON.stringify(next) },
+        supportsAllDrives: true,
       });
       this.idToFileId.set(id, fileId);
       return next;
@@ -147,6 +181,7 @@ export class DriveEntityStore<T extends { id: string }> {
       },
       media: { mimeType: "application/json", body: JSON.stringify(next) },
       fields: "id",
+      supportsAllDrives: true,
     });
 
     const newId = created.data.id;
@@ -160,7 +195,7 @@ export class DriveEntityStore<T extends { id: string }> {
       cached ?? (await findFileIdByName(this.drive, this.folderId, this.fileNameForId(id)));
 
     if (!fileId) return;
-    await this.drive.files.delete({ fileId });
+    await this.drive.files.delete({ fileId, supportsAllDrives: true });
     this.idToFileId.delete(id);
   }
 }

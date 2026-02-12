@@ -9,7 +9,7 @@ interface ProductCardProps {
   description: string;
   price: number;
   image: string;
-  availability?: "available" | "on_demand";
+  availability?: "available" | "on_demand" | "unavailable";
   onAddToCart: (quantity: number) => void;
 }
 
@@ -37,7 +37,7 @@ export default function ProductCard({
   };
 
   const handleAddToCart = () => {
-    if (availability === "on_demand") return;
+    if (availability !== "available") return;
     setIsAdding(true);
     onAddToCart(quantity);
 
@@ -54,6 +54,13 @@ export default function ProductCard({
           <div className="absolute left-3 top-3 z-10">
             <span className="inline-flex items-center rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground shadow-sm">
               Sob demanda
+            </span>
+          </div>
+        )}
+        {availability === "unavailable" && (
+          <div className="absolute left-3 top-3 z-10">
+            <span className="inline-flex items-center rounded-full bg-charcoal px-3 py-1 text-xs font-bold text-white shadow-sm">
+              Indisponível
             </span>
           </div>
         )}
@@ -104,18 +111,19 @@ export default function ProductCard({
           </div>
         </div>
 
-        {availability === "on_demand" ? (
+        {availability === "on_demand" || availability === "unavailable" ? (
           <Button
             onClick={() =>
               sendOnDemandRequest({
                 productName: name,
                 quantity,
+                kind: availability === "unavailable" ? "unavailable" : "on_demand",
               })
             }
             className="btn-secondary w-full flex items-center justify-center gap-2"
           >
             <MessageCircle size={18} />
-            Solicitar
+            {availability === "unavailable" ? "Consultar" : "Solicitar"}
           </Button>
         ) : (
           <Button

@@ -4,13 +4,14 @@ import { trpcQuery, type TrpcError } from "./lib/trpcClient";
 
 export default function AdminGuard({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
-  const [status, setStatus] = useState<"loading" | "authed" | "anon" | "error">(
-    "loading"
-  );
-  const [error, setError] = useState<string>("");
+  const [status, setStatus] = useState<
+    "loading" | "authed" | "anon" | "error"
+  >("loading");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let mounted = true;
+
     trpcQuery<{ role: "admin" }>("auth.me")
       .then(() => {
         if (!mounted) return;
@@ -23,9 +24,10 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
           setLocation("/admin/login");
           return;
         }
-        setError(e.message || "Erro ao validar sessão");
+        setError(e.message || "Erro ao validar sessão.");
         setStatus("error");
       });
+
     return () => {
       mounted = false;
     };
@@ -53,3 +55,4 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
   if (status === "anon") return null;
   return <>{children}</>;
 }
+

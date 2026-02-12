@@ -1,7 +1,15 @@
 import BrandLogo from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { BarChart3, CreditCard, LogOut, Receipt, Tags } from "lucide-react";
+import {
+  BarChart3,
+  CreditCard,
+  Home,
+  LogOut,
+  Receipt,
+  Tags,
+  UtensilsCrossed,
+} from "lucide-react";
 import { useLocation } from "wouter";
 import { trpcMutation } from "./lib/trpcClient";
 
@@ -12,7 +20,7 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { href: "/admin/finance", label: "Dashboard", icon: <BarChart3 size={16} /> },
+  { href: "/admin/finance", label: "Resumo", icon: <BarChart3 size={16} /> },
   {
     href: "/admin/finance/transactions",
     label: "Lançamentos",
@@ -27,6 +35,11 @@ const NAV: NavItem[] = [
     href: "/admin/finance/accounts",
     label: "Contas",
     icon: <CreditCard size={16} />,
+  },
+  {
+    href: "/admin/products",
+    label: "Sabores & Preços",
+    icon: <UtensilsCrossed size={16} />,
   },
 ];
 
@@ -62,7 +75,7 @@ export default function AdminLayout({
             </div>
 
             <nav className="space-y-1">
-              {NAV.map(item => (
+              {NAV.map((item) => (
                 <button
                   key={item.href}
                   type="button"
@@ -87,14 +100,24 @@ export default function AdminLayout({
                 <div className="text-xs text-gray-medium">Admin</div>
                 <div className="text-lg font-bold text-charcoal">{title}</div>
               </div>
-              <Button
-                variant="outline"
-                onClick={handleLogout}
-                className="border-gold/20 hover:bg-primary/5"
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                Sair
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setLocation("/")}
+                  className="border-gold/20 hover:bg-primary/5"
+                >
+                  <Home className="mr-2 h-4 w-4" />
+                  Voltar para vendas
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleLogout}
+                  className="border-gold/20 hover:bg-primary/5"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sair
+                </Button>
+              </div>
             </header>
 
             <div className="card-premium bg-white p-4">{children}</div>

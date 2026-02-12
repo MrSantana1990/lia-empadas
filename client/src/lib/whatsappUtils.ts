@@ -4,20 +4,34 @@ import type { CartItem } from "@/hooks/useCart";
 export type DeliveryMethod = "delivery" | "hand";
 export type PaymentMethod = "pix" | "cash" | "card";
 
+type AvailabilityRequestKind = "on_demand" | "unavailable";
+
 export function sendOnDemandRequest({
   productName,
   quantity,
+  kind = "on_demand",
 }: {
   productName: string;
   quantity: number;
+  kind?: AvailabilityRequestKind;
 }) {
+  const header =
+    kind === "unavailable"
+      ? "🚫 *SABOR INDISPONÍVEL — EMPADAS DA LIA*"
+      : "📦 *SOLICITAÇÃO SOB DEMANDA — EMPADAS DA LIA*";
+
+  const question =
+    kind === "unavailable"
+      ? "Quando volta a ficar disponível?"
+      : "Pode me confirmar disponibilidade e prazo?";
+
   const lines: string[] = [
-    "📦 *SOLICITAÇÃO SOB DEMANDA - EMPADAS DA LIA*",
+    header,
     "",
     `Sabor: ${productName}`,
     `Quantidade: ${quantity} unidade(s)`,
     "",
-    "Pode me confirmar disponibilidade e prazo?",
+    question,
     "",
     `Solicitado em: ${new Date().toLocaleString("pt-BR")}`,
   ];
@@ -49,9 +63,6 @@ function paymentMethodLabel(method: PaymentMethod) {
   return "Dinheiro na entrega";
 }
 
-/**
- * Gera uma mensagem formatada para o WhatsApp com os detalhes do pedido
- */
 export function generateOrderMessage(order: OrderDetails): string {
   const address = order.customerAddress || "";
   const addressLine =
@@ -64,11 +75,11 @@ export function generateOrderMessage(order: OrderDetails): string {
         : "";
 
   const lines: string[] = [
-    "🍽️ *NOVO PEDIDO - EMPADAS DA LIA*",
+    "🍽️ *NOVO PEDIDO — EMPADAS DA LIA*",
     "",
     "📋 *ITENS:*",
     ...order.items.map(
-      item => `• ${item.name} — ${item.quantity}x (${formatPrice(item.price)})`
+      (item) => `• ${item.name} — ${item.quantity}x (${formatPrice(item.price)})`
     ),
     "",
     `💰 *TOTAL: ${formatPrice(order.total)}*`,
@@ -93,26 +104,17 @@ export function generateOrderMessage(order: OrderDetails): string {
   return lines.join("\n");
 }
 
-/**
- * Gera a URL de WhatsApp com a mensagem do pedido
- */
 export function generateWhatsAppURL(order: OrderDetails): string {
   const message = generateOrderMessage(order);
   const encodedMessage = encodeURIComponent(message);
   return `${WHATSAPP_API_URL}?text=${encodedMessage}`;
 }
 
-/**
- * Abre o WhatsApp com a mensagem do pedido em uma nova aba
- */
 export function sendOrderToWhatsApp(order: OrderDetails): void {
   const url = generateWhatsAppURL(order);
   window.open(url, "_blank", "width=800,height=600");
 }
 
-/**
- * Formata preço em Real Brasileiro
- */
 export function formatPrice(price: number): string {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -120,9 +122,6 @@ export function formatPrice(price: number): string {
   }).format(price);
 }
 
-/**
- * Formata data para formato brasileiro
- */
 export function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
@@ -130,3 +129,4 @@ export function formatDate(date: Date): string {
     year: "numeric",
   }).format(date);
 }
+

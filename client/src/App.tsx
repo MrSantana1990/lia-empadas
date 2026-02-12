@@ -2,23 +2,42 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
+import { Suspense, lazy } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
-import AdminLogin from "./admin/pages/AdminLogin";
-import AdminApp from "./admin/AdminApp";
+
+const AdminLogin = lazy(() => import("./admin/pages/AdminLogin"));
+const AdminApp = lazy(() => import("./admin/AdminApp"));
+
+function AdminLoginRoute() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Carregando...</div>}>
+      <AdminLogin />
+    </Suspense>
+  );
+}
+
+function AdminAppRoute() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Carregando...</div>}>
+      <AdminApp />
+    </Suspense>
+  );
+}
 
 
 function Router() {
   return (
     <Switch>
-      <Route path={"/admin/login"} component={AdminLogin} />
+      <Route path={"/admin/login"} component={AdminLoginRoute} />
       {/* Avoid wildcard patterns to keep routing reliable in production builds */}
-      <Route path={"/admin"} component={AdminLogin} />
-      <Route path={"/admin/finance"} component={AdminApp} />
-      <Route path={"/admin/finance/transactions"} component={AdminApp} />
-      <Route path={"/admin/finance/categories"} component={AdminApp} />
-      <Route path={"/admin/finance/accounts"} component={AdminApp} />
+      <Route path={"/admin"} component={AdminLoginRoute} />
+      <Route path={"/admin/finance"} component={AdminAppRoute} />
+      <Route path={"/admin/finance/transactions"} component={AdminAppRoute} />
+      <Route path={"/admin/finance/categories"} component={AdminAppRoute} />
+      <Route path={"/admin/finance/accounts"} component={AdminAppRoute} />
+      <Route path={"/admin/products"} component={AdminAppRoute} />
       <Route path={"/"} component={Home} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

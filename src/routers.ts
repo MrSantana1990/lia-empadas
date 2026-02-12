@@ -1,12 +1,19 @@
 import { TRPCError } from "@trpc/server";
 import jwt from "jsonwebtoken";
 import { nanoid } from "nanoid";
+import path from "node:path";
 import { z } from "zod";
+import { PRODUCTS as DEFAULT_PRODUCTS } from "../shared/const";
 import { clearAdminCookie, setAdminCookie } from "./context";
-import { getDriveClient } from "./driveClient";
+import { getDriveClient, getServiceAccountEmailSafe } from "./driveClient";
 import { DriveEntityStore, ensureFolder } from "./driveEntityStore";
+import { HybridEntityStore } from "./hybridEntityStore";
+import { getLocalDataRootDir } from "./localDataRoot";
+import { LocalEntityStore } from "./localEntityStore";
 import {
   AccountItemSchema,
+  CatalogProductOverrideSchema,
+  ProductAvailabilitySchema,
   CategorySchema,
   PaymentMethodSchema,
   TransactionSchema,
@@ -20,7 +27,13 @@ function requiredEnv(name: string) {
 }
 
 function signAdminJwt() {
-  const secret = requiredEnv("JWT_SECRET");
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Variável de ambiente faltando: JWT_SECRET.",
+    });
+  }
   return jwt.sign({ role: "admin" }, secret, { expiresIn: "7d" });
 }
 
@@ -29,9 +42,9 @@ function getFinanceFolderId() {
 }
 
 type FinanceStores = {
-  categories: DriveEntityStore<z.infer<typeof CategorySchema>>;
-  transactions: DriveEntityStore<z.infer<typeof TransactionSchema>>;
-  accounts: DriveEntityStore<z.infer<typeof AccountItemSchema>>;
+  categories: HybridEntityStore<z.infer<typeof CategorySchema>>;
+  transactions: HybridEntityStore<z.infer<typeof TransactionSchema>>;
+  accounts: HybridEntityStore<z.infer<typeof AccountItemSchema>>;
 };
 
 let financeStoresPromise: Promise<FinanceStores> | null = null;
@@ -42,27 +55,200 @@ async function getFinanceStores(): Promise<FinanceStores> {
   financeStoresPromise = (async () => {
     const drive = getDriveClient();
     const root = getFinanceFolderId();
+    const devFallbackEnabled = process.env.NODE_ENV !== "production";
+    const localRoot = getLocalDataRootDir();
 
-    const categoriesFolder = await ensureFolder(drive, root, "finance_categories");
-    const transactionsFolder = await ensureFolder(drive, root, "finance_transactions");
-    const accountsFolder = await ensureFolder(drive, root, "finance_accounts");
+    let usePrefixes = false;
+    let categoriesFolder = root;
+    let transactionsFolder = root;
+    let accountsFolder = root;
+
+    try {
+      categoriesFolder = await ensureFolder(drive, root, "finance_categories");
+      transactionsFolder = await ensureFolder(drive, root, "finance_transactions");
+      accountsFolder = await ensureFolder(drive, root, "finance_accounts");
+    } catch {
+      // Fallback: keep everything in the root folder using filename prefixes.
+      // This avoids "folder create" permission issues while still staying Drive-first.
+      usePrefixes = true;
+      categoriesFolder = root;
+      transactionsFolder = root;
+      accountsFolder = root;
+    }
 
     return {
-      categories: new DriveEntityStore(drive, categoriesFolder, CategorySchema),
-      transactions: new DriveEntityStore(drive, transactionsFolder, TransactionSchema),
-      accounts: new DriveEntityStore(drive, accountsFolder, AccountItemSchema),
+      categories: new HybridEntityStore(
+        new DriveEntityStore(drive, categoriesFolder, CategorySchema, {
+          filePrefix: usePrefixes ? "finance_categories__" : undefined,
+        }),
+        new LocalEntityStore(
+          path.join(localRoot, "finance_categories"),
+          CategorySchema,
+          usePrefixes ? { filePrefix: "finance_categories__" } : undefined
+        ),
+        CategorySchema,
+        { devFallbackEnabled }
+      ),
+      transactions: new HybridEntityStore(
+        new DriveEntityStore(drive, transactionsFolder, TransactionSchema, {
+          filePrefix: usePrefixes ? "finance_transactions__" : undefined,
+        }),
+        new LocalEntityStore(
+          path.join(localRoot, "finance_transactions"),
+          TransactionSchema,
+          usePrefixes ? { filePrefix: "finance_transactions__" } : undefined
+        ),
+        TransactionSchema,
+        { devFallbackEnabled }
+      ),
+      accounts: new HybridEntityStore(
+        new DriveEntityStore(drive, accountsFolder, AccountItemSchema, {
+          filePrefix: usePrefixes ? "finance_accounts__" : undefined,
+        }),
+        new LocalEntityStore(
+          path.join(localRoot, "finance_accounts"),
+          AccountItemSchema,
+          usePrefixes ? { filePrefix: "finance_accounts__" } : undefined
+        ),
+        AccountItemSchema,
+        { devFallbackEnabled }
+      ),
     };
   })();
 
   return financeStoresPromise;
 }
 
+function describeDriveError(err: unknown) {
+  const e = err as any;
+  const status = e?.response?.status ?? e?.code;
+  const msg = e?.response?.data?.error?.message ?? e?.message;
+  const pieces: string[] = [];
+  if (status) pieces.push(`status ${status}`);
+  if (msg) pieces.push(String(msg).slice(0, 240));
+  return pieces.length > 0 ? pieces.join(" - ") : "erro desconhecido";
+}
+
+function isServiceAccountNoQuotaError(err: unknown) {
+  const e = err as any;
+  const msg = e?.response?.data?.error?.message ?? e?.message ?? "";
+  return typeof msg === "string" && msg.includes("Service Accounts do not have storage quota");
+}
+
+function serviceAccountNoQuotaHelp(scope: string) {
+  const sa = getServiceAccountEmailSafe();
+  const saLine = sa ? ` Service account: ${sa}.` : "";
+  return (
+    `Não foi possível gravar no Google Drive (${scope}).` +
+    saLine +
+    " Isso acontece quando a pasta está em um Drive pessoal (Meu Drive) e a autenticação é via Service Account (sem quota)." +
+    " Solução recomendada: crie/Use um Shared Drive (Google Workspace), adicione a service account como membro (Content manager/Editor)," +
+    " crie uma pasta lá e atualize GOOGLE_DRIVE_ADMIN_FOLDER_ID para a nova pasta."
+  );
+}
+
+function driveConfigHelp(scope: string, err?: unknown) {
+  const detail =
+    process.env.NODE_ENV === "production" || !err
+      ? ""
+      : ` Detalhe: ${describeDriveError(err)}.`;
+  return (
+    `Falha ao acessar o Google Drive (${scope}). ` +
+    "Verifique se as env vars GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 e GOOGLE_DRIVE_ADMIN_FOLDER_ID estão configuradas " +
+    "e se a service account tem permissão de Editor na pasta do Drive." +
+    detail
+  );
+}
+
+async function withDrive<T>(scope: string, fn: () => Promise<T>) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (isServiceAccountNoQuotaError(err)) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: serviceAccountNoQuotaHelp(scope),
+      });
+    }
+
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: driveConfigHelp(scope, err),
+    });
+  }
+}
+
+async function getFinanceStoresOrThrow(): Promise<FinanceStores> {
+  try {
+    return await getFinanceStores();
+  } catch (err) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: driveConfigHelp("financeiro", err),
+    });
+  }
+}
+
+let catalogOverridesStorePromise:
+  | Promise<HybridEntityStore<z.infer<typeof CatalogProductOverrideSchema>>>
+  | null = null;
+
+async function getCatalogOverridesStore() {
+  if (catalogOverridesStorePromise) return catalogOverridesStorePromise;
+
+  catalogOverridesStorePromise = (async () => {
+    const drive = getDriveClient();
+    const root = requiredEnv("GOOGLE_DRIVE_ADMIN_FOLDER_ID");
+    const devFallbackEnabled = process.env.NODE_ENV !== "production";
+    const localRoot = getLocalDataRootDir();
+
+    try {
+      const productsFolder = await ensureFolder(drive, root, "catalog_products");
+      return new HybridEntityStore(
+        new DriveEntityStore(drive, productsFolder, CatalogProductOverrideSchema),
+        new LocalEntityStore(path.join(localRoot, "catalog_products"), CatalogProductOverrideSchema),
+        CatalogProductOverrideSchema,
+        { devFallbackEnabled }
+      );
+    } catch {
+      // Fallback: no folder creation. Store overrides in the root folder with a prefix.
+      return new HybridEntityStore(
+        new DriveEntityStore(drive, root, CatalogProductOverrideSchema, {
+          filePrefix: "catalog_products__",
+        }),
+        new LocalEntityStore(path.join(localRoot, "catalog_products"), CatalogProductOverrideSchema, {
+          filePrefix: "catalog_products__",
+        }),
+        CatalogProductOverrideSchema,
+        { devFallbackEnabled }
+      );
+    }
+  })();
+
+  return catalogOverridesStorePromise;
+}
+
 const authRouter = router({
   login: publicProcedure
     .input(z.object({ username: z.string().min(1), password: z.string().min(1) }))
     .mutation(({ input, ctx }) => {
-      const username = requiredEnv("ADMIN_USERNAME");
-      const password = requiredEnv("ADMIN_PASSWORD");
+      const envUsername = process.env.ADMIN_USERNAME;
+      const envPassword = process.env.ADMIN_PASSWORD;
+      const missing = ["JWT_SECRET", "ADMIN_USERNAME", "ADMIN_PASSWORD"].filter(
+        (k) => !process.env[k]
+      );
+      if (missing.length > 0) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message:
+            "Variáveis de ambiente faltando (local): " +
+            missing.join(", ") +
+            ". Crie um arquivo `.env` ou `.env.local` na raiz do projeto e reinicie `pnpm netlify dev`.",
+        });
+      }
+
+      const username = envUsername as string;
+      const password = envPassword as string;
 
       if (input.username !== username || input.password !== password) {
         throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -86,11 +272,64 @@ const authRouter = router({
   }),
 });
 
+const catalogRouter = router({
+  products: router({
+    list: publicProcedure.query(async () => {
+      let overrides: z.infer<typeof CatalogProductOverrideSchema>[] = [];
+      try {
+        const store = await getCatalogOverridesStore();
+        overrides = await store.list();
+      } catch {
+        overrides = [];
+      }
+
+      const overrideMap = new Map(overrides.map(o => [o.id, o]));
+      const items = DEFAULT_PRODUCTS.map(p => {
+        const override = overrideMap.get(p.id);
+        return {
+          ...p,
+          price: override?.price ?? p.price,
+          availability: override?.availability ?? p.availability ?? "available",
+        };
+      });
+
+      return { items };
+    }),
+
+    update: adminProcedure
+      .input(
+        z.object({
+          id: zId,
+          price: z.number().min(0).optional(),
+          availability: ProductAvailabilitySchema.optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const store = await withDrive("catálogo", () => getCatalogOverridesStore());
+        await withDrive("catálogo", () =>
+          store.put(input.id, {
+            price: input.price,
+            availability: input.availability,
+          })
+        );
+        return { ok: true };
+      }),
+
+    reset: adminProcedure
+      .input(z.object({ id: zId }))
+      .mutation(async ({ input }) => {
+        const store = await withDrive("catálogo", () => getCatalogOverridesStore());
+        await withDrive("catálogo", () => store.delete(input.id));
+        return { ok: true };
+      }),
+  }),
+});
+
 const financeRouter = router({
   categories: router({
     list: adminProcedure.query(async () => {
-      const { categories } = await getFinanceStores();
-      const items = await categories.list();
+      const { categories } = await getFinanceStoresOrThrow();
+      const items = await withDrive("financeiro", () => categories.list());
       return { items };
     }),
     create: adminProcedure
@@ -101,8 +340,8 @@ const financeRouter = router({
           name: input.name,
           kind: input.kind,
         });
-        const { categories } = await getFinanceStores();
-        await categories.put(item.id, item);
+        const { categories } = await getFinanceStoresOrThrow();
+        await withDrive("financeiro", () => categories.put(item.id, item));
         return { item };
       }),
     update: adminProcedure
@@ -116,18 +355,18 @@ const financeRouter = router({
         })
       )
       .mutation(async ({ input }) => {
-        const { categories } = await getFinanceStores();
-        const existing = await categories.get(input.id);
+        const { categories } = await getFinanceStoresOrThrow();
+        const existing = await withDrive("financeiro", () => categories.get(input.id));
         if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
         const updated = CategorySchema.parse({ ...existing, ...input.data, id: input.id });
-        await categories.put(input.id, updated);
+        await withDrive("financeiro", () => categories.put(input.id, updated));
         return { item: updated };
       }),
     delete: adminProcedure
       .input(z.object({ id: zId }))
       .mutation(async ({ input }) => {
-        const { categories, transactions } = await getFinanceStores();
-        const tx = await transactions.list();
+        const { categories, transactions } = await getFinanceStoresOrThrow();
+        const tx = await withDrive("financeiro", () => transactions.list());
         const inUse = tx.some(t => t.categoryId === input.id);
         if (inUse) {
           throw new TRPCError({
@@ -136,7 +375,7 @@ const financeRouter = router({
               "Não é possível excluir: existem lançamentos usando esta categoria. Reclassifique os lançamentos e tente novamente.",
           });
         }
-        await categories.delete(input.id);
+        await withDrive("financeiro", () => categories.delete(input.id));
         return { ok: true };
       }),
   }),
@@ -155,8 +394,8 @@ const financeRouter = router({
           .optional()
       )
       .query(async ({ input }) => {
-        const { transactions } = await getFinanceStores();
-        const list = await transactions.list();
+        const { transactions } = await getFinanceStoresOrThrow();
+        const list = await withDrive("financeiro", () => transactions.list());
         const from = input?.from;
         const to = input?.to;
         const status = input?.status;
@@ -187,8 +426,8 @@ const financeRouter = router({
           id: nanoid(),
           status: input.status ?? "PENDING",
         });
-        const { transactions } = await getFinanceStores();
-        await transactions.put(item.id, item);
+        const { transactions } = await getFinanceStoresOrThrow();
+        await withDrive("financeiro", () => transactions.put(item.id, item));
         return { item };
       }),
 
@@ -200,17 +439,17 @@ const financeRouter = router({
         })
       )
       .mutation(async ({ input }) => {
-        const { transactions } = await getFinanceStores();
-        const existing = await transactions.get(input.id);
+        const { transactions } = await getFinanceStoresOrThrow();
+        const existing = await withDrive("financeiro", () => transactions.get(input.id));
         if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
         const updated = TransactionSchema.parse({ ...existing, ...input.data, id: input.id });
-        await transactions.put(input.id, updated);
+        await withDrive("financeiro", () => transactions.put(input.id, updated));
         return { item: updated };
       }),
 
     delete: adminProcedure.input(z.object({ id: zId })).mutation(async ({ input }) => {
-      const { transactions } = await getFinanceStores();
-      await transactions.delete(input.id);
+      const { transactions } = await getFinanceStoresOrThrow();
+      await withDrive("financeiro", () => transactions.delete(input.id));
       return { ok: true };
     }),
 
@@ -223,24 +462,24 @@ const financeRouter = router({
         })
       )
       .mutation(async ({ input }) => {
-        const { transactions } = await getFinanceStores();
-        const existing = await transactions.get(input.id);
+        const { transactions } = await getFinanceStoresOrThrow();
+        const existing = await withDrive("financeiro", () => transactions.get(input.id));
         if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
         const updated = TransactionSchema.parse({
           ...existing,
           status: "CONFIRMED",
           paymentMethod: input.paymentMethod ?? existing.paymentMethod,
         });
-        await transactions.put(input.id, updated);
+        await withDrive("financeiro", () => transactions.put(input.id, updated));
         return { item: updated };
       }),
 
     cancel: adminProcedure.input(z.object({ id: zId })).mutation(async ({ input }) => {
-      const { transactions } = await getFinanceStores();
-      const existing = await transactions.get(input.id);
+      const { transactions } = await getFinanceStoresOrThrow();
+      const existing = await withDrive("financeiro", () => transactions.get(input.id));
       if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
       const updated = TransactionSchema.parse({ ...existing, status: "CANCELED" });
-      await transactions.put(input.id, updated);
+      await withDrive("financeiro", () => transactions.put(input.id, updated));
       return { item: updated };
     }),
 
@@ -252,9 +491,9 @@ const financeRouter = router({
             .optional()
         )
         .query(async ({ input }) => {
-          const { transactions, categories } = await getFinanceStores();
-          const tx = await transactions.list();
-          const cats = await categories.list();
+          const { transactions, categories } = await getFinanceStoresOrThrow();
+          const tx = await withDrive("financeiro", () => transactions.list());
+          const cats = await withDrive("financeiro", () => categories.list());
           const catMap = new Map(cats.map(c => [c.id, c.name]));
 
           const from = input?.from;
@@ -305,8 +544,8 @@ const financeRouter = router({
 
   accounts: router({
     list: adminProcedure.query(async () => {
-      const { accounts } = await getFinanceStores();
-      const items = await accounts.list();
+      const { accounts } = await getFinanceStoresOrThrow();
+      const items = await withDrive("financeiro", () => accounts.list());
       items.sort((a, b) => (a.dueDateISO < b.dueDateISO ? -1 : 1));
       return { items };
     }),
@@ -322,47 +561,61 @@ const financeRouter = router({
           id: nanoid(),
           status: input.status ?? "OPEN",
         });
-        const { accounts } = await getFinanceStores();
-        await accounts.put(item.id, item);
+        const { accounts } = await getFinanceStoresOrThrow();
+        await withDrive("financeiro", () => accounts.put(item.id, item));
         return { item };
       }),
     update: adminProcedure
       .input(z.object({ id: zId, data: AccountItemSchema.partial().omit({ id: true }) }))
       .mutation(async ({ input }) => {
-        const { accounts } = await getFinanceStores();
-        const existing = await accounts.get(input.id);
+        const { accounts } = await getFinanceStoresOrThrow();
+        const existing = await withDrive("financeiro", () => accounts.get(input.id));
         if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
         const updated = AccountItemSchema.parse({ ...existing, ...input.data, id: input.id });
-        await accounts.put(input.id, updated);
+        await withDrive("financeiro", () => accounts.put(input.id, updated));
         return { item: updated };
       }),
     delete: adminProcedure.input(z.object({ id: zId })).mutation(async ({ input }) => {
-      const { accounts } = await getFinanceStores();
-      await accounts.delete(input.id);
+      const { accounts } = await getFinanceStoresOrThrow();
+      await withDrive("financeiro", () => accounts.delete(input.id));
       return { ok: true };
     }),
     pay: adminProcedure
       .input(z.object({ id: zId, paymentMethod: PaymentMethodSchema.optional() }))
       .mutation(async ({ input }) => {
-        const { accounts } = await getFinanceStores();
-        const existing = await accounts.get(input.id);
+        const { accounts } = await getFinanceStoresOrThrow();
+        const existing = await withDrive("financeiro", () => accounts.get(input.id));
         if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
         const updated = AccountItemSchema.parse({ ...existing, status: "PAID" });
-        await accounts.put(input.id, updated);
+        await withDrive("financeiro", () => accounts.put(input.id, updated));
         return { item: updated };
       }),
   }),
 
   dashboard: router({
     summary: adminProcedure
-      .input(z.object({ from: z.string(), to: z.string() }))
+      .input(
+        z
+          .object({
+            from: z.string().min(1).optional(),
+            to: z.string().min(1).optional(),
+          })
+          .optional()
+      )
       .query(async ({ input }) => {
-        const { transactions, categories } = await getFinanceStores();
-        const tx = await transactions.list();
-        const cats = await categories.list();
+        const { transactions, categories } = await getFinanceStoresOrThrow();
+        const tx = await withDrive("financeiro", () => transactions.list());
+        const cats = await withDrive("financeiro", () => categories.list());
         const catMap = new Map(cats.map(c => [c.id, c.name]));
 
-        const inRange = tx.filter(t => t.dateISO >= input.from && t.dateISO <= input.to);
+        const from = input?.from;
+        const to = input?.to;
+
+        const inRange = tx.filter(t => {
+          if (from && t.dateISO < from) return false;
+          if (to && t.dateISO > to) return false;
+          return true;
+        });
 
         const confirmed = inRange.filter(t => t.status === "CONFIRMED");
         const pending = inRange.filter(t => t.status === "PENDING");
@@ -407,7 +660,7 @@ const financeRouter = router({
         }));
 
         return {
-          range: { from: input.from, to: input.to },
+          range: { from: from ?? "", to: to ?? "" },
           totals: {
             inConfirmed,
             outConfirmed,
@@ -424,6 +677,7 @@ const financeRouter = router({
 
 export const appRouter = router({
   auth: authRouter,
+  catalog: catalogRouter,
   finance: financeRouter,
 });
 

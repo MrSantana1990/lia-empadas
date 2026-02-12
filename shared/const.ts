@@ -2,20 +2,33 @@ export const COOKIE_NAME = "app_session_id";
 export const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
 
 // Configuração de WhatsApp
-export const WHATSAPP_NUMBER = "557197198691"; // +55 71 9719-8691
+// Use apenas dígitos (ex: +55 71 9719-8691 -> 557197198691)
+export const WHATSAPP_NUMBER = "557197198691";
 export const WHATSAPP_API_URL = `https://wa.me/${WHATSAPP_NUMBER}`;
 
 // Pagamento (opcional)
 // - Se você usar PIX adiantado, coloque aqui a sua chave para aparecer no pedido.
 export const PIX_KEY = "maria.q.s.j@gmail.com";
 
-// Produtos disponíveis
-export const PRODUCTS = [
+export type ProductAvailability = "available" | "on_demand" | "unavailable";
+
+export type Product = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  image: string;
+  category: "classic" | "premium" | "vegetarian" | "all";
+  availability: ProductAvailability;
+};
+
+// Produtos disponíveis (catálogo base)
+// - O Admin pode sobrescrever preço/disponibilidade via Drive.
+export const PRODUCTS: readonly Product[] = [
   {
     id: "empada-frango",
     name: "Empada de Frango",
-    description:
-      "Empada tradicional recheada com frango desfiado e tempero caseiro",
+    description: "Empada tradicional recheada com frango desfiado e tempero caseiro",
     price: 10,
     image: "/images/products/empada-frango.jpg",
     category: "classic",
@@ -66,7 +79,7 @@ export const PRODUCTS = [
     category: "classic",
     availability: "available",
   },
-] as const;
+];
 
 // Categorias
 export const CATEGORIES = [
@@ -92,3 +105,4 @@ export const MESSAGES = {
   minOrder: `Quantidade mínima: ${MIN_ORDER_QUANTITY} unidades`,
   maxOrder: `Quantidade máxima: ${MAX_ORDER_QUANTITY} unidades`,
 } as const;
+

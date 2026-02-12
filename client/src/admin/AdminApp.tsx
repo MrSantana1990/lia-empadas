@@ -3,6 +3,7 @@ import AdminGuard from "./AdminGuard";
 import AccountsPage from "./pages/AccountsPage";
 import CategoriesPage from "./pages/CategoriesPage";
 import FinanceDashboard from "./pages/FinanceDashboard";
+import ProductsPage from "./pages/ProductsPage";
 import TransactionsPage from "./pages/TransactionsPage";
 
 function AdminNotFound() {
@@ -24,6 +25,7 @@ export default function AdminApp() {
         <Route path="/admin/finance/transactions" component={TransactionsPage} />
         <Route path="/admin/finance/categories" component={CategoriesPage} />
         <Route path="/admin/finance/accounts" component={AccountsPage} />
+        <Route path="/admin/products" component={ProductsPage} />
         <Route component={AdminNotFound} />
       </Switch>
     </AdminGuard>

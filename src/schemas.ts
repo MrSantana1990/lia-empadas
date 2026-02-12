@@ -53,3 +53,27 @@ export const AccountItemSchema = z.object({
 });
 export type AccountItem = z.infer<typeof AccountItemSchema>;
 
+export const ProductAvailabilitySchema = z.enum([
+  "available",
+  "on_demand",
+  "unavailable",
+]);
+export type ProductAvailability = z.infer<typeof ProductAvailabilitySchema>;
+
+export const CatalogProductSchema = z.object({
+  id: zId,
+  name: z.string().min(1),
+  description: z.string().min(1),
+  price: z.number().min(0),
+  image: z.string().min(1),
+  category: z.string().min(1),
+  availability: ProductAvailabilitySchema,
+});
+export type CatalogProduct = z.infer<typeof CatalogProductSchema>;
+
+export const CatalogProductOverrideSchema = z.object({
+  id: zId,
+  price: z.number().min(0).optional(),
+  availability: ProductAvailabilitySchema.optional(),
+});
+export type CatalogProductOverride = z.infer<typeof CatalogProductOverrideSchema>;

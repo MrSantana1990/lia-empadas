@@ -7,10 +7,6 @@ import { useLocation } from "wouter";
 export default function NotFound() {
   const [, setLocation] = useLocation();
 
-  const handleGoHome = () => {
-    setLocation("/");
-  };
-
   return (
     <div
       id="topo"
@@ -43,7 +39,7 @@ export default function NotFound() {
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button
-              onClick={handleGoHome}
+              onClick={() => setLocation("/")}
               className="btn-premium px-6 py-2.5 inline-flex"
             >
               <Home className="w-4 h-4 mr-2" />
@@ -55,3 +51,4 @@ export default function NotFound() {
     </div>
   );
 }
+

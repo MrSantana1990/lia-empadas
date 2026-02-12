@@ -3,10 +3,11 @@ import { ShoppingCart, Menu, X, ChevronRight, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ProductCard from '@/components/ProductCard';
 import { useCart } from '@/hooks/useCart';
-import { PRODUCTS, CATEGORIES } from '@/const';
+import { CATEGORIES } from '@/const';
 import CartDrawer from '@/components/CartDrawer';
 import BrandLogo from '@/components/BrandLogo';
 import { useLocation } from 'wouter';
+import { useCatalogProducts } from '@/hooks/useCatalogProducts';
 
 /**
  * Design: Luxo Minimalista Moderno
@@ -22,17 +23,18 @@ export default function Home() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { addItem, getTotalQuantity, isLoaded } = useCart();
   const [, setLocation] = useLocation();
+  const { products } = useCatalogProducts();
 
   // Filtrar produtos por categoria
   const filteredProducts = useMemo(() => {
     if (selectedCategory === 'all') {
-      return PRODUCTS;
+      return products;
     }
-    return PRODUCTS.filter(product => product.category === selectedCategory);
-  }, [selectedCategory]);
+    return products.filter(product => product.category === selectedCategory);
+  }, [selectedCategory, products]);
 
   const handleAddToCart = (productId: string, quantity: number) => {
-    const product = PRODUCTS.find(p => p.id === productId);
+    const product = products.find(p => p.id === productId);
     if (product) {
       addItem(productId, product.name, product.price, product.image, quantity);
     }

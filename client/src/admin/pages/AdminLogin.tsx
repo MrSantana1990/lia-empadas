@@ -13,15 +13,20 @@ function getLoginErrorMessage(err: unknown) {
   if (status === 401) return "Usuário ou senha inválidos.";
 
   if (status === 404) {
-    return "Backend não encontrado. Para o Admin funcionar local, rode `pnpm dlx netlify-cli dev` e acesse http://localhost:8888/admin/login.";
+    return (
+      "Backend não encontrado. Para o Admin funcionar localmente, rode `pnpm netlify dev` e acesse " +
+      "http://localhost:8888/admin/login. Para abrir no tablet/celular na mesma rede, use `pnpm netlify:lan` " +
+      "e acesse http://SEU-IP:8888/admin/login."
+    );
   }
 
   if (status === 500) {
-    return "Erro no backend. Verifique se suas env vars estão carregadas (JWT_SECRET, ADMIN_USERNAME, ADMIN_PASSWORD, GOOGLE_*).";
+    if (message && /Variáveis de ambiente faltando/i.test(message)) return message;
+    return "Erro no backend. Abra `/api/health` (porta 8888) para ver quais env vars estão faltando e reinicie `pnpm netlify dev` após criar `.env`/`.env.local`.";
   }
 
   if (message && /failed to fetch|networkerror|load failed/i.test(message)) {
-    return "Falha de rede ao chamar o backend. Rode `pnpm dlx netlify-cli dev` (porta 8888) e tente novamente.";
+    return "Falha de rede ao chamar o backend. Rode `pnpm netlify dev` (porta 8888) e tente novamente.";
   }
 
   return message || "Falha no login";
@@ -64,7 +69,7 @@ export default function AdminLogin() {
           </div>
 
           <h1 className="text-2xl font-bold text-charcoal text-center mb-2">
-            Login Admin
+            Acesso do Admin
           </h1>
           <p className="text-sm text-gray-medium text-center mb-6">
             Entre para acessar o financeiro

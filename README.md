@@ -27,7 +27,13 @@ Comandos:
 - Build: `pnpm build`
 - Preview do build (servidor do Vite): `pnpm preview`
 - Rodar build com Express (modo “produção” local): `pnpm build` e depois `pnpm start`
-- Testar Function local (Netlify, porta 8888): `pnpm netlify dev`
+- Testar Admin + API local (Netlify Dev, porta 8888):
+  - `pnpm netlify:dev` (ou `pnpm netlify dev`)
+  - Abrir: `http://localhost:8888/admin/login`
+  - **Na mesma rede (tablet/celular):** `pnpm netlify:lan` e abrir `http://SEU-IP:8888/admin/login`
+  - Observação: `pnpm dev` (porta 3000) roda **apenas o frontend** (sem `/api/*`), então o login do Admin não funciona lá.
+  - Para o Admin funcionar localmente, crie `.env` ou `.env.local` (use `.env.example` como base).
+  - No Windows, garanta que o arquivo esteja salvo como **UTF-8** (evita problemas se o editor salvar em UTF-16).
 
 ## Estrutura do projeto
 
@@ -82,6 +88,19 @@ Você controla isso em `shared/const.ts:1`:
 - `availability: "available"` → aparece botão **Adicionar** (vai para o carrinho)
 - `availability: "on_demand"` → aparece selo **Sob demanda** + botão **Solicitar**
   - Esse botão abre WhatsApp com mensagem pronta de solicitação (`client/src/lib/whatsappUtils.ts:1`).
+- `availability: "unavailable"` → aparece selo **Indisponível** + botão **Consultar** (WhatsApp)
+
+### Ajustar preço/status pelo Admin (Drive)
+
+No painel:
+- Local (Netlify Dev): `http://localhost:8888/admin/products`
+- Produção: `https://<seu-site>.netlify.app/admin/products`
+
+Você consegue:
+- alterar **preço** por sabor
+- marcar o sabor como **Disponível / Sob demanda / Indisponível**
+
+Essas mudanças são salvas no Drive (em `GOOGLE_DRIVE_ADMIN_FOLDER_ID`) e a vitrine pública passa a refletir automaticamente.
 
 ## Carrinho (estado e persistência)
 
@@ -193,6 +212,18 @@ Financeiro é persistido no Google Drive (service account) como **JSON por regis
 Arquivos:
 - Drive client: `src/driveClient.ts:1`
 - Store genérico por registro: `src/driveEntityStore.ts:1`
+
+Observação: se o ambiente não tiver permissão para **criar pastas** no Drive, o backend faz fallback e salva na pasta raiz usando prefixos:
+- `finance_categories__<id>.json`
+- `finance_transactions__<id>.json`
+- `finance_accounts__<id>.json`
+
+#### Local (dev): fallback automático para arquivos no PC
+
+Se o Google Drive retornar o erro **“Service Accounts do not have storage quota”** durante `pnpm netlify:dev`, o backend faz fallback automático e salva os JSONs localmente em:
+- `.local-data/`
+
+Isso permite testar o painel localmente mesmo sem escrita no Drive. Em produção (Netlify) a persistência deve ser no Drive.
 
 ### Domínio Financeiro (tRPC)
 
