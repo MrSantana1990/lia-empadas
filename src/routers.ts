@@ -6,7 +6,7 @@ import { z } from "zod";
 import { PRODUCTS as DEFAULT_PRODUCTS } from "../shared/const";
 import { clearAdminCookie, setAdminCookie } from "./context";
 import { getDriveClient, getServiceAccountEmailSafe } from "./driveClient";
-import { DriveEntityStore, ensureFolder } from "./driveEntityStore";
+import { DriveJsonCollectionStore } from "./driveJsonCollectionStore";
 import { HybridEntityStore } from "./hybridEntityStore";
 import { getLocalDataRootDir } from "./localDataRoot";
 import { LocalEntityStore } from "./localEntityStore";
@@ -56,62 +56,26 @@ async function getFinanceStores(): Promise<FinanceStores> {
     const drive = getDriveClient();
     const root = getFinanceFolderId();
     // IMPORTANT: never write to local filesystem in Netlify production (read-only).
-    // Enable local fallback only for local development (`netlify dev`) or non-Netlify runs.
-    const devFallbackEnabled = process.env.NETLIFY_DEV === "true" || !process.env.NETLIFY;
+    // Local fallback is only allowed in `netlify dev`.
+    const devFallbackEnabled = process.env.NETLIFY_DEV === "true";
     const localRoot = getLocalDataRootDir();
-
-    let usePrefixes = false;
-    let categoriesFolder = root;
-    let transactionsFolder = root;
-    let accountsFolder = root;
-
-    try {
-      categoriesFolder = await ensureFolder(drive, root, "finance_categories");
-      transactionsFolder = await ensureFolder(drive, root, "finance_transactions");
-      accountsFolder = await ensureFolder(drive, root, "finance_accounts");
-    } catch {
-      // Fallback: keep everything in the root folder using filename prefixes.
-      // This avoids "folder create" permission issues while still staying Drive-first.
-      usePrefixes = true;
-      categoriesFolder = root;
-      transactionsFolder = root;
-      accountsFolder = root;
-    }
 
     return {
       categories: new HybridEntityStore(
-        new DriveEntityStore(drive, categoriesFolder, CategorySchema, {
-          filePrefix: usePrefixes ? "finance_categories__" : undefined,
-        }),
-        new LocalEntityStore(
-          path.join(localRoot, "finance_categories"),
-          CategorySchema,
-          usePrefixes ? { filePrefix: "finance_categories__" } : undefined
-        ),
+        new DriveJsonCollectionStore(drive, root, "finance_categories.json", CategorySchema),
+        new LocalEntityStore(path.join(localRoot, "finance_categories"), CategorySchema),
         CategorySchema,
         { devFallbackEnabled }
       ),
       transactions: new HybridEntityStore(
-        new DriveEntityStore(drive, transactionsFolder, TransactionSchema, {
-          filePrefix: usePrefixes ? "finance_transactions__" : undefined,
-        }),
-        new LocalEntityStore(
-          path.join(localRoot, "finance_transactions"),
-          TransactionSchema,
-          usePrefixes ? { filePrefix: "finance_transactions__" } : undefined
-        ),
+        new DriveJsonCollectionStore(drive, root, "finance_transactions.json", TransactionSchema),
+        new LocalEntityStore(path.join(localRoot, "finance_transactions"), TransactionSchema),
         TransactionSchema,
         { devFallbackEnabled }
       ),
       accounts: new HybridEntityStore(
-        new DriveEntityStore(drive, accountsFolder, AccountItemSchema, {
-          filePrefix: usePrefixes ? "finance_accounts__" : undefined,
-        }),
-        new LocalEntityStore(
-          path.join(localRoot, "finance_accounts"),
-          AccountItemSchema,
-          usePrefixes ? { filePrefix: "finance_accounts__" } : undefined
-        ),
+        new DriveJsonCollectionStore(drive, root, "finance_accounts.json", AccountItemSchema),
+        new LocalEntityStore(path.join(localRoot, "finance_accounts"), AccountItemSchema),
         AccountItemSchema,
         { devFallbackEnabled }
       ),
@@ -144,16 +108,15 @@ function serviceAccountNoQuotaHelp(scope: string) {
     `Não foi possível gravar no Google Drive (${scope}).` +
     saLine +
     " Isso acontece quando a pasta está em um Drive pessoal (Meu Drive) e a autenticação é via Service Account (sem quota)." +
-    " Solução recomendada: crie/Use um Shared Drive (Google Workspace), adicione a service account como membro (Content manager/Editor)," +
-    " crie uma pasta lá e atualize GOOGLE_DRIVE_ADMIN_FOLDER_ID para a nova pasta."
+    " Solução 1 (recomendada): usar um Shared Drive (Google Workspace) e adicionar a service account como membro (Editor/Content manager)." +
+    " Solução 2 (Drive pessoal): crie manualmente na pasta do Drive (GOOGLE_DRIVE_ADMIN_FOLDER_ID) os arquivos JSON e compartilhe a pasta com a service account como Editor." +
+    " Arquivos: finance_categories.json, finance_transactions.json, finance_accounts.json, catalog_products.json (conteúdo inicial: [])."
   );
 }
 
 function driveConfigHelp(scope: string, err?: unknown) {
-  const detail =
-    process.env.NODE_ENV === "production" || !err
-      ? ""
-      : ` Detalhe: ${describeDriveError(err)}.`;
+  const includeDetail = process.env.NETLIFY_DEV === "true";
+  const detail = includeDetail && err ? ` Detalhe: ${describeDriveError(err)}.` : "";
   return (
     `Falha ao acessar o Google Drive (${scope}). ` +
     "Verifique se as env vars GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 e GOOGLE_DRIVE_ADMIN_FOLDER_ID estão configuradas " +
@@ -202,30 +165,16 @@ async function getCatalogOverridesStore() {
     const drive = getDriveClient();
     const root = requiredEnv("GOOGLE_DRIVE_ADMIN_FOLDER_ID");
     // IMPORTANT: never write to local filesystem in Netlify production (read-only).
-    const devFallbackEnabled = process.env.NETLIFY_DEV === "true" || !process.env.NETLIFY;
+    // Local fallback is only allowed in `netlify dev`.
+    const devFallbackEnabled = process.env.NETLIFY_DEV === "true";
     const localRoot = getLocalDataRootDir();
 
-    try {
-      const productsFolder = await ensureFolder(drive, root, "catalog_products");
-      return new HybridEntityStore(
-        new DriveEntityStore(drive, productsFolder, CatalogProductOverrideSchema),
-        new LocalEntityStore(path.join(localRoot, "catalog_products"), CatalogProductOverrideSchema),
-        CatalogProductOverrideSchema,
-        { devFallbackEnabled }
-      );
-    } catch {
-      // Fallback: no folder creation. Store overrides in the root folder with a prefix.
-      return new HybridEntityStore(
-        new DriveEntityStore(drive, root, CatalogProductOverrideSchema, {
-          filePrefix: "catalog_products__",
-        }),
-        new LocalEntityStore(path.join(localRoot, "catalog_products"), CatalogProductOverrideSchema, {
-          filePrefix: "catalog_products__",
-        }),
-        CatalogProductOverrideSchema,
-        { devFallbackEnabled }
-      );
-    }
+    return new HybridEntityStore(
+      new DriveJsonCollectionStore(drive, root, "catalog_products.json", CatalogProductOverrideSchema),
+      new LocalEntityStore(path.join(localRoot, "catalog_products"), CatalogProductOverrideSchema),
+      CatalogProductOverrideSchema,
+      { devFallbackEnabled }
+    );
   })();
 
   return catalogOverridesStorePromise;

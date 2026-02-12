@@ -203,24 +203,32 @@ Arquivos:
 
 ### Persistência “Drive-first” (JSON)
 
-Financeiro é persistido no Google Drive (service account) como **JSON por registro** em subpastas dentro de `GOOGLE_DRIVE_ADMIN_FOLDER_ID`:
+Financeiro e catálogo (overrides de preço/disponibilidade) são persistidos no Google Drive como **1 arquivo JSON por coleção** dentro de `GOOGLE_DRIVE_ADMIN_FOLDER_ID`:
 
-- `finance_categories/<id>.json`
-- `finance_transactions/<id>.json`
-- `finance_accounts/<id>.json`
+- `finance_categories.json`
+- `finance_transactions.json`
+- `finance_accounts.json`
+- `catalog_products.json` (overrides do catálogo: preço + disponibilidade)
 
 Arquivos:
 - Drive client: `src/driveClient.ts:1`
-- Store genérico por registro: `src/driveEntityStore.ts:1`
+- Store genérico por coleção: `src/driveJsonCollectionStore.ts:1`
 
-Observação: se o ambiente não tiver permissão para **criar pastas** no Drive, o backend faz fallback e salva na pasta raiz usando prefixos:
-- `finance_categories__<id>.json`
-- `finance_transactions__<id>.json`
-- `finance_accounts__<id>.json`
+#### Importante (Drive pessoal + Service Account)
+
+Se você usa **Drive pessoal (Meu Drive)** com **Service Account**, pode aparecer o erro:
+`Service Accounts do not have storage quota`.
+
+Nessa situação, o sistema **não consegue criar arquivos no Drive**. Duas opções:
+- **Recomendado**: usar **Shared Drive** (Google Workspace) e adicionar a service account como membro (Editor/Content manager).
+- **Drive pessoal (workaround)**: crie manualmente os arquivos acima (conteúdo inicial `[]`) dentro da pasta `GOOGLE_DRIVE_ADMIN_FOLDER_ID` e compartilhe a pasta com a service account como **Editor**.
+
+Para validar se o Drive está OK (antes de deploy):
+- `pnpm drive:verify`
 
 #### Local (dev): fallback automático para arquivos no PC
 
-Se o Google Drive retornar o erro **“Service Accounts do not have storage quota”** durante `pnpm netlify:dev`, o backend faz fallback automático e salva os JSONs localmente em:
+Se o Google Drive retornar o erro **“Service Accounts do not have storage quota”** durante `pnpm netlify:dev`, o backend faz fallback automático e salva os dados localmente em:
 - `.local-data/`
 
 Isso permite testar o painel localmente mesmo sem escrita no Drive. Em produção (Netlify) a persistência deve ser no Drive.
@@ -294,8 +302,8 @@ curl -i -b cookies.txt "<SITE>/api/finance/transactions/export.csv"
 7) Verificar no Drive (manual):
 
 - Abra a pasta do Drive informada em `GOOGLE_DRIVE_ADMIN_FOLDER_ID`
-- Entre em `finance_transactions/`
-- Deve existir um arquivo `<id>.json` referente ao lançamento criado
+- Abra `finance_transactions.json`
+- Deve existir um item com o lançamento criado (no array)
 
 Observação: para mutations tRPC use `POST /api/trpc/<procedure>` com body JSON sendo o input direto (ex: `{"username":"...","password":"..."}`); para queries use `GET /api/trpc/<procedure>?input=<json-url-encoded>`.
 

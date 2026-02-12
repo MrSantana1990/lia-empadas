@@ -7,6 +7,7 @@
     "dev": "vite --host",
     "netlify:dev": "netlify dev",
     "netlify:lan": "netlify dev --host 0.0.0.0",
+    "drive:verify": "tsx scripts/driveVerify.ts",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "preview": "vite preview --host",
